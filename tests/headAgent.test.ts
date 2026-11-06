@@ -22,11 +22,16 @@ function preferFreeCancellation(a: Quote, b: Quote): number {
 const testIndustry: IndustryConfig = {
   id: "test",
   label: "Test industry",
+  clientNoun: "a test client",
+  goal: "Get a test quote.",
   quoteSchema: z.object({
     total: z.number().positive(),
     freeCancellation: z.boolean().optional(),
   }),
+  followUps: [],
+  commitInstruction: "Confirm the test quote.",
   tieBreak: preferFreeCancellation,
+  simBusinesses: [],
 };
 
 const defaultOptions: HeadAgentOptions = {
