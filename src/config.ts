@@ -25,14 +25,58 @@ function positiveNumber() {
   return z.coerce.number({ error }).positive();
 }
 
-const configSchema = z.object({
-  PORT: wholeNumber().min(1).max(65535).default(3001),
-  MAX_PARALLEL_CALLS: wholeNumber().min(1).max(30).default(3),
-  DECISION_WINDOW_MS: wholeNumber().min(1).default(20000),
-  SETTLE_GRACE_MS: wholeNumber().min(0).default(5000),
-  RUN_TIMEOUT_MS: wholeNumber().min(1).default(120000),
-  PRICE_FLAG_PCT: positiveNumber().default(10),
-});
+// A copied .env.example leaves "OPENAI_API_KEY=", which must count as missing.
+function blankToUndefined(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === "") {
+    return undefined;
+  }
+
+  return value.trim();
+}
+
+function optionalText() {
+  return z.string().optional().transform(blankToUndefined);
+}
+
+type OpenAIValues = {
+  PROVIDER: string;
+  OPENAI_API_KEY: string | undefined;
+  OPENAI_MODEL: string | undefined;
+};
+
+function requireOpenAIValues(
+  values: OpenAIValues,
+  context: z.RefinementCtx,
+): void {
+  if (values.PROVIDER !== "text") {
+    return;
+  }
+
+  const message = 'must be set when PROVIDER is "text"';
+
+  if (values.OPENAI_API_KEY === undefined) {
+    context.addIssue({ code: "custom", path: ["OPENAI_API_KEY"], message });
+  }
+
+  if (values.OPENAI_MODEL === undefined) {
+    context.addIssue({ code: "custom", path: ["OPENAI_MODEL"], message });
+  }
+}
+
+const configSchema = z
+  .object({
+    PORT: wholeNumber().min(1).max(65535).default(3001),
+    MAX_PARALLEL_CALLS: wholeNumber().min(1).max(30).default(3),
+    DECISION_WINDOW_MS: wholeNumber().min(1).default(20000),
+    SETTLE_GRACE_MS: wholeNumber().min(0).default(8000),
+    RUN_TIMEOUT_MS: wholeNumber().min(1).default(120000),
+    PRICE_FLAG_PCT: positiveNumber().default(10),
+    PROVIDER: z.enum(["fake", "text"]).default("fake"),
+    OPENAI_API_KEY: optionalText(),
+    OPENAI_MODEL: optionalText(),
+    MAX_TURNS: wholeNumber().min(1).default(14),
+  })
+  .superRefine(requireOpenAIValues);
 
 export type Config = z.infer<typeof configSchema>;
 

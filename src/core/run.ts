@@ -5,7 +5,7 @@ import type {
   CallProvider,
 } from "../providers/types";
 import { emit } from "./events";
-import { HeadAgent } from "./headAgent";
+import { DECISION_MADE_ERROR, HeadAgent } from "./headAgent";
 import type { ReportResult } from "./headAgent";
 import { runPriceCheck } from "./priceCheck";
 import type {
@@ -143,7 +143,7 @@ function pushCommit(runId: string, winner: Quote, liveCalls: LiveCalls): void {
   let delivered = false;
 
   if (winnerCall !== undefined) {
-    delivered = winnerCall.handle.send("commit");
+    delivered = winnerCall.handle.send({ command: "commit", quote: winner });
   }
 
   emitDecisionPushed(
@@ -166,7 +166,7 @@ function pushClose(
 ): void {
   for (const [callId, call] of liveCalls) {
     if (callId !== winnerCallId) {
-      const delivered = call.handle.send("close");
+      const delivered = call.handle.send({ command: "close" });
       emitDecisionPushed(runId, callId, call.businessId, "close", delivered);
     }
   }
@@ -225,28 +225,46 @@ function createHeadAgent(
   return new HeadAgent(industry, expectedCalls, agentOptions, handleDecision);
 }
 
+function emitRejectedQuote(
+  runId: string,
+  callId: string,
+  businessId: string,
+  error: string,
+): void {
+  let level: "info" | "warn" = "warn";
+  let code = "BAD_QUOTE";
+
+  // Callers keep talking until the decision reaches them, so a late quote is normal.
+  if (error === DECISION_MADE_ERROR) {
+    level = "info";
+    code = "LATE_QUOTE";
+  }
+
+  emit({
+    type: "alert",
+    runId,
+    at: Date.now(),
+    callId,
+    level,
+    code,
+    message: `Quote from ${businessId} rejected: ${error}`,
+  });
+}
+
 function handleQuote(
   run: ActiveRun,
   callId: string,
   businessId: string,
   raw: unknown,
 ): ReportResult {
+  const { runId } = run;
   const result = run.agent.report(callId, businessId, raw);
-  const at = Date.now();
 
   if (result.ok) {
     const quote = result.quote;
-    emit({ type: "quote", runId: run.runId, at, callId, businessId, quote });
+    emit({ type: "quote", runId, at: Date.now(), callId, businessId, quote });
   } else {
-    emit({
-      type: "alert",
-      runId: run.runId,
-      at,
-      callId,
-      level: "warn",
-      code: "BAD_QUOTE",
-      message: `Quote from ${businessId} rejected: ${result.error}`,
-    });
+    emitRejectedQuote(runId, callId, businessId, result.error);
   }
 
   return result;

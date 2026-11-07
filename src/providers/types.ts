@@ -1,6 +1,6 @@
 import type { ReportResult } from "../core/headAgent";
 import type {
-  CallCommand,
+  CallInstruction,
   CallOutcome,
   CallStatus,
   IndustryConfig,
@@ -22,7 +22,7 @@ export type CallContext = {
 
 export type CallHandle = {
   done: Promise<CallOutcome>;
-  send: (command: CallCommand) => boolean;
+  send: (instruction: CallInstruction) => boolean;
 };
 
 export type CallProvider = {

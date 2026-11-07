@@ -10,6 +10,11 @@ const referenceSchema = z.strictObject({
   source: z.string().min(1).optional(),
 });
 
+const contactSchema = z.strictObject({
+  name: z.string().min(1),
+  email: z.email(),
+});
+
 // Strict, so a misspelled businessIds fails instead of silently calling everyone.
 const jobSchema = z.strictObject({
   id: z.string().min(1),
@@ -18,6 +23,7 @@ const jobSchema = z.strictObject({
   request: z.string().min(1),
   businessIds: z.array(z.string()).optional(),
   reference: referenceSchema.optional(),
+  contact: contactSchema.optional(),
 });
 
 function readJsonFile(path: string): unknown {

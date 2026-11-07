@@ -1,5 +1,6 @@
 import type {
   CallCommand,
+  CallInstruction,
   CallOutcome,
   QuoteFields,
   TranscriptLine,
@@ -40,15 +41,15 @@ class FakeCall {
     this.noAnswer = noAnswer;
   }
 
-  send(command: CallCommand): boolean {
+  send(instruction: CallInstruction): boolean {
     if (this.finished || this.command !== undefined) {
       return false;
     }
 
-    this.command = command;
+    this.command = instruction.command;
 
     if (this.deliverToWaitingCall !== undefined) {
-      this.deliverToWaitingCall(command);
+      this.deliverToWaitingCall(instruction.command);
     }
 
     return true;
@@ -230,7 +231,7 @@ export function fakeProvider(options: FakeProviderOptions = {}): CallProvider {
 
     return {
       done: call.run(),
-      send: (command) => call.send(command),
+      send: (instruction) => call.send(instruction),
     };
   }
 

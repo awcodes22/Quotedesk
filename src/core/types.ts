@@ -22,6 +22,11 @@ export type ReferencePrices = {
   source?: string;
 };
 
+export type Contact = {
+  name: string;
+  email: string;
+};
+
 export type Job = {
   id: string;
   industryId: string;
@@ -29,6 +34,7 @@ export type Job = {
   request: string;
   businessIds?: string[];
   reference?: ReferencePrices;
+  contact?: Contact;
 };
 
 export type PriceCheckRow = {
@@ -66,6 +72,10 @@ export type TranscriptLine = {
 
 export type CallCommand = "commit" | "close";
 
+export type CallInstruction =
+  | { command: "commit"; quote: Quote }
+  | { command: "close" };
+
 export type CallOutcome = {
   callId: string;
   businessId: string;
@@ -94,6 +104,11 @@ export type SimBusiness = {
   fakeQuotes: QuoteFields[];
 };
 
+export type FieldLabel = {
+  yes: string;
+  no: string;
+};
+
 export type IndustryConfig = {
   id: string;
   label: string;
@@ -104,5 +119,6 @@ export type IndustryConfig = {
   commitInstruction: string;
   tieBreak?: (a: Quote, b: Quote) => number;
   linePrices?: (fields: QuoteFields) => Record<string, number>;
+  fieldLabels?: Record<string, FieldLabel>;
   simBusinesses: SimBusiness[];
 };

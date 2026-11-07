@@ -6,7 +6,7 @@ import { onEvent } from "../src/core/events";
 import type { AgentEvent } from "../src/core/events";
 import { isRunning, runJob } from "../src/core/run";
 import type { RunOptions } from "../src/core/run";
-import type { CallOutcome, Job } from "../src/core/types";
+import type { CallInstruction, CallOutcome, Job } from "../src/core/types";
 import { carRentals } from "../src/industries/carRentals";
 import { hotels } from "../src/industries/hotels";
 import { listJobs, loadJob } from "../src/jobs";
@@ -92,13 +92,29 @@ function buildRefusingWinnerProvider(): CallProvider {
     return {
       done: handle.done,
       send: () => {
-        handle.send("close");
+        handle.send({ command: "close" });
         return false;
       },
     };
   }
 
   return { name: "refusing", startCall };
+}
+
+function buildRecordingProvider(sent: CallInstruction[]): CallProvider {
+  function startCall(context: CallContext) {
+    const handle = quickProvider.startCall(context);
+
+    return {
+      done: handle.done,
+      send: (instruction: CallInstruction) => {
+        sent.push(instruction);
+        return handle.send(instruction);
+      },
+    };
+  }
+
+  return { name: "recording", startCall };
 }
 
 function buildBadQuoteProvider(): CallProvider {
@@ -175,6 +191,29 @@ describe("runJob with the fake provider", () => {
       "close",
       "close",
       "commit",
+    ]);
+  });
+
+  it("sends the winning quote with the commit and nothing with a close", async () => {
+    const sent: CallInstruction[] = [];
+    const provider = buildRecordingProvider(sent);
+
+    const report = await runJob(hotelJob, hotels, provider, testOptions);
+
+    expect(report.decision).toMatchObject({ kind: "commit" });
+
+    if (report.decision.kind !== "commit") {
+      throw new Error("The run should have picked a winner.");
+    }
+
+    expect(sent).toHaveLength(3);
+    expect(sent).toContainEqual({
+      command: "commit",
+      quote: report.decision.winner,
+    });
+    expect(sent.filter((item) => item.command === "close")).toEqual([
+      { command: "close" },
+      { command: "close" },
     ]);
   });
 
@@ -429,6 +468,31 @@ describe("jobs", () => {
 
   it("names the file when a job is invalid", () => {
     const path = writeJobFile({ id: "broken", businessIDs: [] });
+
+    expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
+  });
+
+  it("keeps only placeholder contacts in the job files", () => {
+    const jobs = listJobs();
+
+    for (const job of jobs) {
+      expect(job.contact).toEqual({
+        name: "Jane Doe",
+        email: "jane.doe@example.com",
+      });
+    }
+  });
+
+  it("rejects a badly formed contact email", () => {
+    const contact = { name: "Jane Doe", email: "jane.doe-at-example" };
+    const path = writeJobFile({ ...hotelJob, contact });
+
+    expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
+  });
+
+  it("rejects a contact with a missing name", () => {
+    const contact = { email: "jane.doe@example.com" };
+    const path = writeJobFile({ ...hotelJob, contact });
 
     expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
   });

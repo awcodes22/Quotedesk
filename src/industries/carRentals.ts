@@ -149,5 +149,8 @@ export const carRentals: IndustryConfig = {
     "Say the traveller would like to reserve the car at that rate, and ask them to email the confirmation.",
   tieBreak: preferUnlimitedMileage,
   linePrices: getLinePrices,
+  fieldLabels: {
+    unlimitedMileage: { yes: "unlimited mileage", no: "limited mileage" },
+  },
   simBusinesses: [northwayRentals, metroDrive, harbourfrontCarRentals],
 };

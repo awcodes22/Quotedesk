@@ -14,7 +14,7 @@ import type {
 } from "./core/types";
 import { getIndustry } from "./industries/index";
 import { loadJob } from "./jobs";
-import { fakeProvider } from "./providers/fake";
+import { createProvider } from "./providers/index";
 
 const RUNS_DIRECTORY = "runs";
 const SOURCE_COLUMN_WIDTH = 26;
@@ -24,14 +24,32 @@ const DIFF_COLUMN_WIDTH = 9;
 
 type BusinessNames = Map<string, string>;
 
-function readJobPath(): string {
-  const { values } = parseArgs({ options: { job: { type: "string" } } });
+type CliArguments = {
+  jobPath: string;
+  providerName: string;
+};
+
+function readArguments(): CliArguments {
+  const { values } = parseArgs({
+    options: {
+      job: { type: "string" },
+      provider: { type: "string" },
+    },
+  });
 
   if (values.job === undefined) {
-    throw new Error("Usage: npm run job -- --job <path to job file>");
+    throw new Error(
+      "Usage: npm run job -- --job <path to job file> [--provider fake|text]",
+    );
   }
 
-  return values.job;
+  let providerName: string = config.PROVIDER;
+
+  if (values.provider !== undefined) {
+    providerName = values.provider;
+  }
+
+  return { jobPath: values.job, providerName };
 }
 
 function getBusinessNames(industry: IndustryConfig): BusinessNames {
@@ -220,15 +238,16 @@ function printResult(report: RunReport, names: BusinessNames): void {
 }
 
 async function main(): Promise<void> {
-  const jobPath = readJobPath();
+  const { jobPath, providerName } = readArguments();
   const job = loadJob(jobPath);
   const industry = getIndustry(job.industryId);
   const names = getBusinessNames(industry);
+  const provider = createProvider(providerName, config);
 
   startRecorder(RUNS_DIRECTORY);
   startEventPrinter(names);
 
-  const report = await runJob(job, industry, fakeProvider(), {
+  const report = await runJob(job, industry, provider, {
     maxParallelCalls: config.MAX_PARALLEL_CALLS,
     decisionWindowMs: config.DECISION_WINDOW_MS,
     runTimeoutMs: config.RUN_TIMEOUT_MS,

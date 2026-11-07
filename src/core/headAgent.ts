@@ -17,6 +17,8 @@ export type ReportResult =
   | { ok: true; quote: Quote }
   | { ok: false; error: string };
 
+export const DECISION_MADE_ERROR = "A decision was already made.";
+
 type Timer = ReturnType<typeof setTimeout>;
 
 function compareQuotes(a: Quote, b: Quote, industry: IndustryConfig): number {
@@ -127,7 +129,7 @@ export class HeadAgent {
 
   report(callId: string, businessId: string, raw: unknown): ReportResult {
     if (this.decision !== undefined) {
-      return { ok: false, error: "A decision was already made." };
+      return { ok: false, error: DECISION_MADE_ERROR };
     }
 
     const parsed = this.industry.quoteSchema.safeParse(raw);
@@ -156,8 +158,17 @@ export class HeadAgent {
     }
   }
 
+  // A caller can repeat a higher rate it asked about, which must not undo a lower offer.
+  private keepLowestQuote(quote: Quote): void {
+    const storedQuote = this.quotesByCall.get(quote.callId);
+
+    if (storedQuote === undefined || quote.total < storedQuote.total) {
+      this.quotesByCall.set(quote.callId, quote);
+    }
+  }
+
   private recordQuote(quote: Quote): void {
-    this.quotesByCall.set(quote.callId, quote);
+    this.keepLowestQuote(quote);
     this.settledCalls.add(quote.callId);
     this.startWindowIfFirstQuote();
 

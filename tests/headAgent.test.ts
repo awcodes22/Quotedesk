@@ -161,6 +161,53 @@ describe("HeadAgent", () => {
     });
   });
 
+  it("keeps a call's lowest quote when a higher one is reported again", () => {
+    const { agent } = buildAgent(1, defaultOptions);
+
+    agent.report("a", "business-a", { total: 455 });
+    vi.advanceTimersByTime(999);
+
+    agent.report("a", "business-a", { total: 398 });
+    vi.advanceTimersByTime(999);
+
+    const repeated = agent.report("a", "business-a", { total: 455 });
+
+    expect(repeated).toMatchObject({ ok: true, quote: { total: 455 } });
+
+    vi.advanceTimersByTime(999);
+    expect(agent.result).toBeUndefined();
+
+    vi.advanceTimersByTime(1);
+    expect(agent.result).toMatchObject({
+      kind: "commit",
+      reason: "all-settled",
+      winner: { callId: "a", total: 398 },
+      others: [],
+    });
+  });
+
+  it("keeps the first quote when the same total is reported again", () => {
+    const { agent } = buildAgent(1, defaultOptions);
+
+    agent.report("a", "business-a", { total: 398, freeCancellation: false });
+    vi.advanceTimersByTime(999);
+
+    const repeated = agent.report("a", "business-a", {
+      total: 398,
+      freeCancellation: true,
+    });
+
+    expect(repeated).toMatchObject({ ok: true });
+
+    vi.advanceTimersByTime(999);
+    expect(agent.result).toBeUndefined();
+
+    vi.advanceTimersByTime(1);
+    expect(agent.result).toMatchObject({
+      winner: { fields: { total: 398, freeCancellation: false } },
+    });
+  });
+
   it("doesn't restart the grace period when a settled call hangs up", () => {
     const { agent } = buildAgent(2, defaultOptions);
 

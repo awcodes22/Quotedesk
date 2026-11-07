@@ -9,7 +9,9 @@ const quoteSchema = z.object({
   freeCancellation: z
     .boolean()
     .optional()
-    .describe("Whether the booking can be cancelled for free"),
+    .describe(
+      "Whether the booking can be cancelled for free. Set false for a non-refundable rate.",
+    ),
   includesTaxes: z
     .boolean()
     .optional()
@@ -85,5 +87,12 @@ export const hotels: IndustryConfig = {
   commitInstruction:
     "Say you'd like to book the room at that rate, and ask them to email the confirmation.",
   tieBreak: preferFreeCancellation,
+  fieldLabels: {
+    freeCancellation: { yes: "free cancellation", no: "non-refundable" },
+    includesTaxes: {
+      yes: "taxes and fees included",
+      no: "taxes and fees not included",
+    },
+  },
   simBusinesses: [harbourInn, queenWestSuites, unionStationHotel],
 };
