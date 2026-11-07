@@ -16,6 +16,33 @@ export type Decision =
   | { kind: "commit"; winner: Quote; others: Quote[]; reason: DecisionReason }
   | { kind: "none"; reason: "no-quotes" };
 
+export type Job = {
+  id: string;
+  industryId: string;
+  title: string;
+  request: string;
+  businessIds?: string[];
+};
+
+export type CallStatus =
+  | "queued"
+  | "connecting"
+  | "talking"
+  | "quoted"
+  | "committed"
+  | "closed"
+  | "ended"
+  | "failed"
+  | "skipped";
+
+export type TranscriptLine = {
+  speaker: "agent" | "business";
+  text: string;
+  at: number;
+};
+
+export type CallCommand = "commit" | "close";
+
 export type SimBusiness = {
   id: string;
   name: string;
