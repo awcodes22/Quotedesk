@@ -43,6 +43,26 @@ export type TranscriptLine = {
 
 export type CallCommand = "commit" | "close";
 
+export type CallOutcome = {
+  callId: string;
+  businessId: string;
+  status: "completed" | "failed" | "skipped";
+  command?: CallCommand;
+  transcript: TranscriptLine[];
+  notes: string[];
+  error?: string;
+};
+
+export type RunReport = {
+  runId: string;
+  job: Job;
+  provider: string;
+  startedAt: number;
+  endedAt: number;
+  decision: Decision;
+  calls: CallOutcome[];
+};
+
 export type SimBusiness = {
   id: string;
   name: string;

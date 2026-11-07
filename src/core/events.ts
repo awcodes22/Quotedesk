@@ -5,6 +5,7 @@ import type {
   Decision,
   Job,
   Quote,
+  RunReport,
   TranscriptLine,
 } from "./types";
 
@@ -36,6 +37,7 @@ export type AgentEvent =
       command: CallCommand;
       delivered: boolean;
     })
+  | (RunEvent & { type: "run_finished"; report: RunReport })
   | {
       type: "alert";
       runId?: string;

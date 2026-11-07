@@ -1,9 +1,26 @@
 import dotenv from "dotenv";
 import { z } from "zod";
 
+// Returning undefined keeps zod's own message, which states the limit for range errors.
+function describeNumberIssue(issue: z.core.$ZodRawIssue): string | undefined {
+  if (issue.code === "invalid_type") {
+    return "must be a whole number";
+  }
+
+  return undefined;
+}
+
+// Environment variables are always strings, so numbers must be coerced.
+function wholeNumber() {
+  return z.coerce.number({ error: describeNumberIssue }).int();
+}
+
 const configSchema = z.object({
-  // Environment variables are always strings, so PORT must be coerced to a number.
-  PORT: z.coerce.number({ error: "must be set to a number" }).int().min(1).max(65535),
+  PORT: wholeNumber().min(1).max(65535).default(3001),
+  MAX_PARALLEL_CALLS: wholeNumber().min(1).max(30).default(3),
+  DECISION_WINDOW_MS: wholeNumber().min(1).default(20000),
+  SETTLE_GRACE_MS: wholeNumber().min(0).default(5000),
+  RUN_TIMEOUT_MS: wholeNumber().min(1).default(120000),
 });
 
 export type Config = z.infer<typeof configSchema>;

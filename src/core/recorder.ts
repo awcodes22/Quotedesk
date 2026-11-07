@@ -6,14 +6,16 @@ import type { AgentEvent } from "./events";
 const SYSTEM_LOG_FILE = "system.jsonl";
 const ERROR_LOG_INTERVAL_MS = 60_000;
 
-function getLogPath(directory: string, event: AgentEvent): string {
-  let fileName = SYSTEM_LOG_FILE;
+export function getRunLogPath(directory: string, runId: string): string {
+  return join(directory, `${runId}.jsonl`);
+}
 
-  if (event.runId !== undefined) {
-    fileName = `${event.runId}.jsonl`;
+function getLogPath(directory: string, event: AgentEvent): string {
+  if (event.runId === undefined) {
+    return join(directory, SYSTEM_LOG_FILE);
   }
 
-  return join(directory, fileName);
+  return getRunLogPath(directory, event.runId);
 }
 
 function appendEvent(directory: string, event: AgentEvent): void {

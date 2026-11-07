@@ -1,0 +1,6 @@
+{
+  "id": "airport-rental",
+  "industryId": "car-rentals",
+  "title": "3-day airport rental",
+  "request": "A midsize car, picked up at Toronto Pearson on 2026-11-20 and returned on 2026-11-23. That is 3 days."
+}
