@@ -16,12 +16,35 @@ export type Decision =
   | { kind: "commit"; winner: Quote; others: Quote[]; reason: DecisionReason }
   | { kind: "none"; reason: "no-quotes" };
 
+export type ReferencePrices = {
+  total?: number;
+  lines?: Record<string, number>;
+  source?: string;
+};
+
 export type Job = {
   id: string;
   industryId: string;
   title: string;
   request: string;
   businessIds?: string[];
+  reference?: ReferencePrices;
+};
+
+export type PriceCheckRow = {
+  item: string;
+  reference: number;
+  quoted: number;
+  diffPct: number;
+  flagged: boolean;
+};
+
+export type PriceCheck = {
+  businessId: string;
+  thresholdPct: number;
+  rows: PriceCheckRow[];
+  flaggedCount: number;
+  source?: string;
 };
 
 export type CallStatus =
@@ -61,6 +84,7 @@ export type RunReport = {
   endedAt: number;
   decision: Decision;
   calls: CallOutcome[];
+  priceCheck?: PriceCheck;
 };
 
 export type SimBusiness = {

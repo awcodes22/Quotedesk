@@ -4,7 +4,14 @@ import { onEvent } from "./core/events";
 import type { AgentEvent } from "./core/events";
 import { getRunLogPath, startRecorder } from "./core/recorder";
 import { runJob } from "./core/run";
-import type { Decision, IndustryConfig, Quote, RunReport } from "./core/types";
+import type {
+  Decision,
+  IndustryConfig,
+  PriceCheck,
+  PriceCheckRow,
+  Quote,
+  RunReport,
+} from "./core/types";
 import { getIndustry } from "./industries/index";
 import { loadJob } from "./jobs";
 import { fakeProvider } from "./providers/fake";
@@ -12,6 +19,8 @@ import { fakeProvider } from "./providers/fake";
 const RUNS_DIRECTORY = "runs";
 const SOURCE_COLUMN_WIDTH = 26;
 const ELAPSED_COLUMN_WIDTH = 6;
+const MONEY_COLUMN_WIDTH = 11;
+const DIFF_COLUMN_WIDTH = 9;
 
 type BusinessNames = Map<string, string>;
 
@@ -79,6 +88,8 @@ function describeEvent(event: AgentEvent, names: BusinessNames): string {
       return describeDecision(event.decision, names);
     case "decision_pushed":
       return `Pushed ${event.command}, delivered: ${event.delivered}`;
+    case "price_check":
+      return `Price check: ${event.check.flaggedCount} of ${event.check.rows.length} lines flagged`;
     case "run_finished":
       return "Run finished";
     case "alert":
@@ -104,30 +115,107 @@ function startEventPrinter(names: BusinessNames): void {
   onEvent(printEvent);
 }
 
+function formatMoney(amount: number): string {
+  return `$${amount.toFixed(2)}`;
+}
+
+function formatDiff(diffPct: number): string {
+  const diff = `${diffPct.toFixed(1)}%`;
+
+  if (diffPct > 0) {
+    return `+${diff}`;
+  }
+
+  return diff;
+}
+
+function formatTableLine(
+  item: string,
+  reference: string,
+  quoted: string,
+  diff: string,
+  itemWidth: number,
+): string {
+  const itemColumn = item.padEnd(itemWidth);
+  const referenceColumn = reference.padStart(MONEY_COLUMN_WIDTH);
+  const quotedColumn = quoted.padStart(MONEY_COLUMN_WIDTH);
+  const diffColumn = diff.padStart(DIFF_COLUMN_WIDTH);
+  return `  ${itemColumn}${referenceColumn}${quotedColumn}${diffColumn}`;
+}
+
+function formatRow(row: PriceCheckRow, itemWidth: number): string {
+  const line = formatTableLine(
+    row.item,
+    formatMoney(row.reference),
+    formatMoney(row.quoted),
+    formatDiff(row.diffPct),
+    itemWidth,
+  );
+
+  if (row.flagged) {
+    return `${line}  FLAGGED`;
+  }
+
+  return line;
+}
+
+function describePriceCheck(check: PriceCheck): string {
+  let source = "the reference prices";
+
+  if (check.source !== undefined) {
+    source = check.source;
+  }
+
+  return `${check.flaggedCount} of ${check.rows.length} lines off by more than ${check.thresholdPct}% vs ${source}`;
+}
+
+function printPriceCheck(check: PriceCheck): void {
+  const itemHeading = "Item";
+  const itemLengths = check.rows.map((row) => row.item.length);
+  const itemWidth = Math.max(itemHeading.length, ...itemLengths);
+
+  console.log(
+    formatTableLine(itemHeading, "Reference", "Quoted", "Diff", itemWidth),
+  );
+
+  for (const row of check.rows) {
+    console.log(formatRow(row, itemWidth));
+  }
+
+  console.log(describePriceCheck(check));
+}
+
 function printOtherQuotes(others: Quote[], names: BusinessNames): void {
   console.log("Others:");
 
   for (const quote of others) {
     const name = getBusinessName(names, quote.businessId);
-    console.log(`  ${name}: $${quote.total}`);
+    console.log(`  ${name}: ${formatMoney(quote.total)}`);
   }
 }
 
-function printDecisionResult(decision: Decision, names: BusinessNames): void {
+function printDecisionResult(report: RunReport, names: BusinessNames): void {
+  const { decision, priceCheck } = report;
+
   if (decision.kind === "none") {
     console.log("No quotes were received.");
     return;
   }
 
   const winnerName = getBusinessName(names, decision.winner.businessId);
-  console.log(`Winner: ${winnerName} at $${decision.winner.total}`);
+  console.log(`Winner: ${winnerName} at ${formatMoney(decision.winner.total)}`);
+
+  if (priceCheck !== undefined) {
+    printPriceCheck(priceCheck);
+  }
+
   printOtherQuotes(decision.others, names);
 }
 
 function printResult(report: RunReport, names: BusinessNames): void {
   console.log("");
   console.log("Result");
-  printDecisionResult(report.decision, names);
+  printDecisionResult(report, names);
   console.log(`Log: ${getRunLogPath(RUNS_DIRECTORY, report.runId)}`);
 }
 
@@ -145,6 +233,7 @@ async function main(): Promise<void> {
     decisionWindowMs: config.DECISION_WINDOW_MS,
     runTimeoutMs: config.RUN_TIMEOUT_MS,
     settleGraceMs: config.SETTLE_GRACE_MS,
+    priceFlagPct: config.PRICE_FLAG_PCT,
   });
 
   printResult(report, names);

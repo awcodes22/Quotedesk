@@ -4,6 +4,7 @@ import type {
   CallStatus,
   Decision,
   Job,
+  PriceCheck,
   Quote,
   RunReport,
   TranscriptLine,
@@ -37,6 +38,7 @@ export type AgentEvent =
       command: CallCommand;
       delivered: boolean;
     })
+  | (RunEvent & { type: "price_check"; check: PriceCheck })
   | (RunEvent & { type: "run_finished"; report: RunReport })
   | {
       type: "alert";

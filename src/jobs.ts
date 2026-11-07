@@ -3,6 +3,13 @@ import { join } from "node:path";
 import { z } from "zod";
 import type { Job } from "./core/types";
 
+// Prices must be positive because the price check divides by them.
+const referenceSchema = z.strictObject({
+  total: z.number().positive().optional(),
+  lines: z.record(z.string().min(1), z.number().positive()).optional(),
+  source: z.string().min(1).optional(),
+});
+
 // Strict, so a misspelled businessIds fails instead of silently calling everyone.
 const jobSchema = z.strictObject({
   id: z.string().min(1),
@@ -10,6 +17,7 @@ const jobSchema = z.strictObject({
   title: z.string().min(1),
   request: z.string().min(1),
   businessIds: z.array(z.string()).optional(),
+  reference: referenceSchema.optional(),
 });
 
 function readJsonFile(path: string): unknown {

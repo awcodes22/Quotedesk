@@ -35,6 +35,7 @@ const testOptions: RunOptions = {
   decisionWindowMs: 5_000,
   runTimeoutMs: 10_000,
   settleGraceMs: 200,
+  priceFlagPct: 10,
 };
 
 const quickProvider = fakeProvider({ stepMs: 1 });
@@ -64,6 +65,14 @@ function findEventIndex(events: AgentEvent[], type: AgentEvent["type"]): number 
 function countActiveTimers(): number {
   const resources = process.getActiveResourcesInfo();
   return resources.filter((resource) => resource === "Timeout").length;
+}
+
+function writeJobFile(contents: unknown): string {
+  const directory = mkdtempSync(join(tmpdir(), "quotedesk-jobs-"));
+  tempDirectories.push(directory);
+  const path = join(directory, "job.json");
+  writeFileSync(path, JSON.stringify(contents));
+  return path;
 }
 
 function buildCompletedOutcome(context: CallContext): CallOutcome {
@@ -343,6 +352,71 @@ describe("runJob", () => {
   });
 });
 
+describe("runJob price check", () => {
+  it("emits price_check before run_finished for a car rental", async () => {
+    const events = collectEvents();
+    const job = loadJob("data/jobs/car-rentals.json");
+
+    const report = await runJob(job, carRentals, quickProvider, testOptions);
+
+    const checkIndex = findEventIndex(events, "price_check");
+    const finishedIndex = findEventIndex(events, "run_finished");
+
+    expect(checkIndex).toBeGreaterThanOrEqual(0);
+    expect(checkIndex).toBe(finishedIndex - 1);
+    expect(report.priceCheck).toMatchObject({
+      businessId: "harbourfront-car-rentals",
+      flaggedCount: 1,
+    });
+  });
+
+  it("flags the Total row for a hotel run", async () => {
+    const job = loadJob("data/jobs/hotels.json");
+
+    const report = await runJob(job, hotels, quickProvider, testOptions);
+
+    expect(report.priceCheck).toMatchObject({
+      rows: [{ item: "Total", reference: 349, quoted: 398, flagged: true }],
+    });
+  });
+
+  it("uses the threshold from the run options", async () => {
+    const job = loadJob("data/jobs/hotels.json");
+    const options = { ...testOptions, priceFlagPct: 20 };
+
+    const report = await runJob(job, hotels, quickProvider, options);
+
+    expect(report.priceCheck).toMatchObject({
+      thresholdPct: 20,
+      flaggedCount: 0,
+    });
+  });
+
+  it("does nothing when the job has no reference", async () => {
+    const events = collectEvents();
+
+    const report = await runJob(hotelJob, hotels, quickProvider, testOptions);
+
+    expect(findEventIndex(events, "price_check")).toBe(-1);
+    expect(report).not.toHaveProperty("priceCheck");
+  });
+
+  it("does nothing when there is no winner", async () => {
+    const events = collectEvents();
+    const job = loadJob("data/jobs/hotels.json");
+
+    const report = await runJob(
+      job,
+      hotels,
+      buildCrashingProvider(),
+      testOptions,
+    );
+
+    expect(findEventIndex(events, "price_check")).toBe(-1);
+    expect(report).not.toHaveProperty("priceCheck");
+  });
+});
+
 describe("jobs", () => {
   it("lists the job files", () => {
     const jobs = listJobs();
@@ -354,10 +428,20 @@ describe("jobs", () => {
   });
 
   it("names the file when a job is invalid", () => {
-    const directory = mkdtempSync(join(tmpdir(), "quotedesk-jobs-"));
-    tempDirectories.push(directory);
-    const path = join(directory, "broken.json");
-    writeFileSync(path, JSON.stringify({ id: "broken", businessIDs: [] }));
+    const path = writeJobFile({ id: "broken", businessIDs: [] });
+
+    expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
+  });
+
+  it("rejects a misspelled reference field", () => {
+    const path = writeJobFile({ ...hotelJob, reference: { totl: 349 } });
+
+    expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
+  });
+
+  it("rejects a zero reference price, which can't be compared", () => {
+    const reference = { lines: { "daily rate": 0 } };
+    const path = writeJobFile({ ...hotelJob, reference });
 
     expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
   });

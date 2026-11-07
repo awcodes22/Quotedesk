@@ -7,6 +7,7 @@ import type {
 import { emit } from "./events";
 import { HeadAgent } from "./headAgent";
 import type { ReportResult } from "./headAgent";
+import { runPriceCheck } from "./priceCheck";
 import type {
   CallCommand,
   CallOutcome,
@@ -14,6 +15,7 @@ import type {
   Decision,
   IndustryConfig,
   Job,
+  PriceCheck,
   Quote,
   RunReport,
   SimBusiness,
@@ -25,6 +27,7 @@ export type RunOptions = {
   decisionWindowMs: number;
   runTimeoutMs: number;
   settleGraceMs: number;
+  priceFlagPct: number;
 };
 
 type LiveCall = {
@@ -394,6 +397,31 @@ function emitRunStarted(
   });
 }
 
+function checkWinningPrice(
+  runId: string,
+  job: Job,
+  industry: IndustryConfig,
+  decision: Decision,
+  priceFlagPct: number,
+): PriceCheck | undefined {
+  if (decision.kind === "none") {
+    return undefined;
+  }
+
+  const check = runPriceCheck(
+    decision.winner,
+    job.reference,
+    industry,
+    priceFlagPct,
+  );
+
+  if (check !== undefined) {
+    emit({ type: "price_check", runId, at: Date.now(), check });
+  }
+
+  return check;
+}
+
 async function executeRun(
   job: Job,
   industry: IndustryConfig,
@@ -428,6 +456,14 @@ async function executeRun(
     callsFinished,
   ]);
 
+  const priceCheck = checkWinningPrice(
+    runId,
+    job,
+    industry,
+    decision,
+    options.priceFlagPct,
+  );
+
   const report: RunReport = {
     runId,
     job,
@@ -437,6 +473,10 @@ async function executeRun(
     decision,
     calls,
   };
+
+  if (priceCheck !== undefined) {
+    report.priceCheck = priceCheck;
+  }
 
   emit({ type: "run_finished", runId, at: report.endedAt, report });
   return report;

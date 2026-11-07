@@ -2,17 +2,27 @@ import dotenv from "dotenv";
 import { z } from "zod";
 
 // Returning undefined keeps zod's own message, which states the limit for range errors.
-function describeNumberIssue(issue: z.core.$ZodRawIssue): string | undefined {
-  if (issue.code === "invalid_type") {
-    return "must be a whole number";
+function buildTypeErrorMessage(message: string) {
+  function describeIssue(issue: z.core.$ZodRawIssue): string | undefined {
+    if (issue.code === "invalid_type") {
+      return message;
+    }
+
+    return undefined;
   }
 
-  return undefined;
+  return describeIssue;
 }
 
 // Environment variables are always strings, so numbers must be coerced.
 function wholeNumber() {
-  return z.coerce.number({ error: describeNumberIssue }).int();
+  const error = buildTypeErrorMessage("must be a whole number");
+  return z.coerce.number({ error }).int();
+}
+
+function positiveNumber() {
+  const error = buildTypeErrorMessage("must be a number");
+  return z.coerce.number({ error }).positive();
 }
 
 const configSchema = z.object({
@@ -21,6 +31,7 @@ const configSchema = z.object({
   DECISION_WINDOW_MS: wholeNumber().min(1).default(20000),
   SETTLE_GRACE_MS: wholeNumber().min(0).default(5000),
   RUN_TIMEOUT_MS: wholeNumber().min(1).default(120000),
+  PRICE_FLAG_PCT: positiveNumber().default(10),
 });
 
 export type Config = z.infer<typeof configSchema>;

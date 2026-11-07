@@ -2,5 +2,9 @@
   "id": "toronto-weekend",
   "industryId": "hotels",
   "title": "2 nights in Toronto",
-  "request": "1 king room for 2 guests, checking in 2026-11-20 and out 2026-11-22. That is 2 nights."
+  "request": "1 king room for 2 guests, checking in 2026-11-20 and out 2026-11-22. That is 2 nights.",
+  "reference": {
+    "total": 349,
+    "source": "Listed price online"
+  }
 }
