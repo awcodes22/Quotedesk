@@ -2,12 +2,14 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { onEvent } from "../src/core/events";
 import type { AgentEvent } from "../src/core/events";
 import { getRunLogPath, startRecorder } from "../src/core/recorder";
 import { runJob } from "../src/core/run";
 import { hotels } from "../src/industries/hotels";
 import { loadJob } from "../src/jobs";
 import { fakeProvider } from "../src/providers/fake";
+import { scaleRun } from "../src/scale";
 import {
   createInitialState,
   runReducer,
@@ -257,14 +259,6 @@ describe("runReducer on a recorded fake run", () => {
     expect(turnCount).toBe(lineCount);
   });
 
-  it("reports how long each call took to answer", () => {
-    const state = reduceAll(recordedEvents);
-    const steps = selectGettingThrough(findCall(state, WINNER_CALL_ID));
-
-    expect(steps).toHaveLength(1);
-    expect(steps[0]).toMatchObject({ kind: "answered" });
-  });
-
   it("never changes a state it was given", () => {
     const half = Math.floor(recordedEvents.length / 2);
     const midState = reduceAll(recordedEvents.slice(0, half));
@@ -297,10 +291,11 @@ describe("run status along the way", () => {
     });
   });
 
-  it("is collecting quotes once one arrives", () => {
+  it("is deciding as soon as a quote is in, while still collecting quotes", () => {
     const state = reduceAll(eventsThrough("quote"));
 
-    expect(selectRunStatus(state)).toBe("quotes");
+    expect(state.deadline).not.toBeNull();
+    expect(selectRunStatus(state)).toBe("deciding");
     expect(selectHeadAgentPlan(state).doingNow.title).toBe("Collecting quotes");
   });
 
@@ -457,10 +452,81 @@ describe("grid states", () => {
     expect(findCall(state, "call-quoted-one").firstQuote).toMatchObject({ total: 400 });
   });
 
+  it("shows how long a call took to answer", () => {
+    const events = [
+      startedEvent(["slow-desk"]),
+      statusEvent("slow-desk", "connecting", 1_000),
+      statusEvent("slow-desk", "talking", 3_500),
+    ];
+    const state = reduceAll(events);
+
+    expect(selectGettingThrough(findCall(state, "call-slow-desk"))).toEqual([
+      { kind: "answered", afterMs: 2_500 },
+    ]);
+  });
+
+  it("hides an answer time under a tenth of a second", () => {
+    const events = [
+      startedEvent(["instant-desk"]),
+      statusEvent("instant-desk", "connecting", 1_000),
+      statusEvent("instant-desk", "talking", 1_040),
+    ];
+    const state = reduceAll(events);
+
+    expect(selectGettingThrough(findCall(state, "call-instant-desk"))).toEqual([]);
+  });
+
   it("ignores events from another run", () => {
     const stray = { ...quoteEvent("talking-one", 100, 13), runId: "run-other" };
     const state = reduceAll([...buildOpenRun(), stray]);
 
     expect(findCall(state, "call-talking-one").quote).toBeNull();
+  });
+});
+
+describe("a 120-call run", () => {
+  it("reaches Deciding while calls are still open", async () => {
+    const events: AgentEvent[] = [];
+    const stopListening = onEvent((event) => events.push(event));
+    const scaled = scaleRun(loadJob("data/jobs/hotels.json"), hotels, 120);
+
+    try {
+      await runJob(
+        scaled.job,
+        scaled.industry,
+        fakeProvider({ stepMs: 1, failBusinessIds: scaled.noAnswerIds }),
+        {
+          maxParallelCalls: 120,
+          decisionWindowMs: 300,
+          runTimeoutMs: 5_000,
+          settleGraceMs: 50,
+          priceFlagPct: 10,
+        },
+      );
+    } finally {
+      stopListening();
+    }
+
+    let state = createInitialState();
+    let decidingState: RunState | null = null;
+
+    for (const event of events) {
+      state = runReducer(state, event);
+
+      if (decidingState === null && selectRunStatus(state) === "deciding") {
+        decidingState = state;
+      }
+    }
+
+    if (decidingState === null) {
+      throw new Error("The run never reached Deciding.");
+    }
+
+    const openCalls = selectCalls(decidingState).filter((call) => call.endedAt === null);
+
+    expect(decidingState.decision).toBeNull();
+    expect(decidingState.deadline).not.toMatchObject({ reason: "all-settled" });
+    expect(openCalls.length).toBeGreaterThan(0);
+    expect(selectRunStatus(state)).toBe("done");
   });
 });

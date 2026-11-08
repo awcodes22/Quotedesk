@@ -524,13 +524,12 @@ export function selectRunStatus(state) {
     return "booking";
   }
 
-  const settling = state.deadline !== null && state.deadline.reason === "all-settled";
+  const hasQuote = selectCalls(state).some((call) => call.quote !== null);
 
-  if (decision !== null || settling) {
+  // Once a quote is in, the head agent is counting down to a decision even while calls talk on.
+  if (decision !== null || (hasQuote && state.deadline !== null)) {
     return "deciding";
   }
-
-  const hasQuote = selectCalls(state).some((call) => call.quote !== null);
 
   if (hasQuote) {
     return "quotes";
@@ -911,6 +910,13 @@ export function selectHeadAgentPlan(state) {
     return planWhileQuoting(state);
   }
 
+  // Until every call has settled, deciding still means gathering the rest of the quotes.
+  const settling = state.deadline !== null && state.deadline.reason === "all-settled";
+
+  if (status === "deciding" && settling === false && state.decision === null) {
+    return planWhileQuoting(state);
+  }
+
   if (status === "deciding") {
     return planWhileDeciding(state);
   }
@@ -922,6 +928,9 @@ export function selectHeadAgentPlan(state) {
   return planWhenDone(state);
 }
 
+// Simulated calls answer the instant they dial, and "Answered 0.0s" tells the reader nothing.
+const MIN_ANSWER_MS = 100;
+
 /**
  * Only answering is reported today. Phone menus and holds join this list when a provider sends them.
  * @param {CallState} call
@@ -932,5 +941,11 @@ export function selectGettingThrough(call) {
     return [];
   }
 
-  return [{ kind: "answered", afterMs: call.answeredAt - call.dialedAt }];
+  const afterMs = call.answeredAt - call.dialedAt;
+
+  if (afterMs < MIN_ANSWER_MS) {
+    return [];
+  }
+
+  return [{ kind: "answered", afterMs }];
 }

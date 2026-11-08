@@ -21,14 +21,44 @@ describe("scaleRun", () => {
     expect(scaled.industry.simBusinesses.slice(0, 3)).toEqual(hotels.simBusinesses);
   });
 
-  it("jitters clone prices but keeps a drop a drop", () => {
+  it("jitters final prices around the real ones", () => {
     const scaled = scaleRun(job, hotels, 120);
     const clones = scaled.industry.simBusinesses.slice(3);
-    const totals = clones.flatMap((clone) => clone.fakeQuotes.map((quote) => quote.total));
+    const finals = clones.flatMap((clone) => clone.fakeQuotes.slice(-1));
+    const totals = finals.map((quote) => quote.total);
 
     expect(Math.min(...totals)).toBeGreaterThanOrEqual(Math.floor(398 * 0.97));
     expect(Math.max(...totals)).toBeLessThanOrEqual(Math.ceil(455 * 1.17));
     expect(new Set(totals).size).toBeGreaterThan(20);
+  });
+
+  it("mixes terms across clones instead of copying one business", () => {
+    const scaled = scaleRun(job, hotels, 120);
+    const finals = scaled.industry.simBusinesses
+      .slice(3)
+      .flatMap((clone) => clone.fakeQuotes.slice(-1));
+    const refundable = finals.filter((quote) => quote.freeCancellation === true);
+    const nonRefundable = finals.filter((quote) => quote.freeCancellation === false);
+
+    expect(refundable.length).toBeGreaterThan(nonRefundable.length);
+    expect(nonRefundable.length).toBeGreaterThan(0);
+  });
+
+  it("drops the price on only about a fifth of the quoting clones", () => {
+    const scaled = scaleRun(job, hotels, 120);
+    const quoting = scaled.industry.simBusinesses
+      .slice(3)
+      .filter((clone) => clone.fakeQuotes.length > 0);
+    const dropping = quoting.filter((clone) => clone.fakeQuotes.length === 2);
+    const share = dropping.length / quoting.length;
+
+    expect(share).toBeGreaterThan(0.1);
+    expect(share).toBeLessThan(0.3);
+  });
+
+  it("keeps a drop a drop", () => {
+    const scaled = scaleRun(job, hotels, 120);
+    const clones = scaled.industry.simBusinesses.slice(3);
 
     for (const clone of clones.filter((business) => business.fakeQuotes.length === 2)) {
       const totals = clone.fakeQuotes.map((quote) => quote.total);
