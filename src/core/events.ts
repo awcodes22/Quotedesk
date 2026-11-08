@@ -3,6 +3,7 @@ import type {
   CallCommand,
   CallStatus,
   Decision,
+  DecisionDeadline,
   Job,
   PriceCheck,
   Quote,
@@ -32,6 +33,7 @@ export type AgentEvent =
   | (CallEvent & { type: "transcript"; line: TranscriptLine })
   | (CallEvent & { type: "quote"; quote: Quote })
   | (CallEvent & { type: "note"; text: string })
+  | (RunEvent & DecisionDeadline & { type: "decision_scheduled" })
   | (RunEvent & { type: "decision"; decision: Decision })
   | (CallEvent & {
       type: "decision_pushed";

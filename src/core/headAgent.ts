@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type {
   Decision,
+  DecisionDeadline,
   DecisionReason,
   IndustryConfig,
   Quote,
@@ -20,6 +21,8 @@ export type ReportResult =
 export const DECISION_MADE_ERROR = "A decision was already made.";
 
 type Timer = ReturnType<typeof setTimeout>;
+
+type DeadlineListener = (deadline: DecisionDeadline) => void;
 
 function compareQuotes(a: Quote, b: Quote, industry: IndustryConfig): number {
   if (a.total !== b.total) {
@@ -90,6 +93,7 @@ export class HeadAgent {
   private readonly expectedCalls: number;
   private readonly options: HeadAgentOptions;
   private readonly onDecision: (decision: Decision) => void;
+  private readonly onDeadline: DeadlineListener | undefined;
 
   private readonly quotesByCall = new Map<string, Quote>();
   private readonly settledCalls = new Set<string>();
@@ -98,17 +102,22 @@ export class HeadAgent {
   private timeoutTimer: Timer | undefined = undefined;
   private windowTimer: Timer | undefined = undefined;
   private graceTimer: Timer | undefined = undefined;
+  private timeoutDeadline: number | undefined = undefined;
+  private windowDeadline: number | undefined = undefined;
+  private graceDeadline: number | undefined = undefined;
 
   constructor(
     industry: IndustryConfig,
     expectedCalls: number,
     options: HeadAgentOptions,
     onDecision: (decision: Decision) => void,
+    onDeadline?: DeadlineListener,
   ) {
     this.industry = industry;
     this.expectedCalls = expectedCalls;
     this.options = options;
     this.onDecision = onDecision;
+    this.onDeadline = onDeadline;
   }
 
   get result(): Decision | undefined {
@@ -125,6 +134,9 @@ export class HeadAgent {
     this.timeoutTimer = setTimeout(() => {
       this.finish("timeout");
     }, this.options.timeoutMs);
+
+    this.timeoutDeadline = Date.now() + this.options.timeoutMs;
+    this.announceNextDeadline();
   }
 
   report(callId: string, businessId: string, raw: unknown): ReportResult {
@@ -185,6 +197,9 @@ export class HeadAgent {
     this.windowTimer = setTimeout(() => {
       this.finish("window");
     }, this.options.windowMs);
+
+    this.windowDeadline = Date.now() + this.options.windowMs;
+    this.announceNextDeadline();
   }
 
   private allCallsSettled(): boolean {
@@ -203,6 +218,46 @@ export class HeadAgent {
     this.graceTimer = setTimeout(() => {
       this.finish("all-settled");
     }, this.options.graceMs);
+
+    this.graceDeadline = Date.now() + this.options.graceMs;
+    this.announceNextDeadline();
+  }
+
+  private findNextDeadline(): DecisionDeadline | undefined {
+    const candidates: DecisionDeadline[] = [];
+
+    if (this.timeoutDeadline !== undefined) {
+      candidates.push({ deadlineAt: this.timeoutDeadline, reason: "timeout" });
+    }
+
+    if (this.windowDeadline !== undefined) {
+      candidates.push({ deadlineAt: this.windowDeadline, reason: "window" });
+    }
+
+    if (this.graceDeadline !== undefined) {
+      candidates.push({ deadlineAt: this.graceDeadline, reason: "all-settled" });
+    }
+
+    let next: DecisionDeadline | undefined = undefined;
+
+    for (const candidate of candidates) {
+      if (next === undefined || candidate.deadlineAt < next.deadlineAt) {
+        next = candidate;
+      }
+    }
+
+    return next;
+  }
+
+  // Only reports the timers above; it never changes when the decision happens.
+  private announceNextDeadline(): void {
+    const next = this.findNextDeadline();
+
+    if (this.onDeadline === undefined || next === undefined) {
+      return;
+    }
+
+    this.onDeadline(next);
   }
 
   private clearTimers(): void {

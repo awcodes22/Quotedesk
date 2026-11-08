@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { HeadAgent, rankQuotes } from "../src/core/headAgent";
 import type { HeadAgentOptions } from "../src/core/headAgent";
-import type { Decision, IndustryConfig, Quote } from "../src/core/types";
+import type {
+  Decision,
+  DecisionDeadline,
+  IndustryConfig,
+  Quote,
+} from "../src/core/types";
 
 function preferFreeCancellation(a: Quote, b: Quote): number {
   const aIsFree = a.fields.freeCancellation === true;
@@ -206,6 +211,73 @@ describe("HeadAgent", () => {
     expect(agent.result).toMatchObject({
       winner: { fields: { total: 398, freeCancellation: false } },
     });
+  });
+
+  it("announces the soonest decision deadline as timers start", () => {
+    const onDeadline = vi.fn<(deadline: DecisionDeadline) => void>();
+    const agent = new HeadAgent(
+      testIndustry,
+      2,
+      defaultOptions,
+      vi.fn(),
+      onDeadline,
+    );
+    const startedAt = Date.now();
+
+    agent.start();
+    expect(onDeadline).toHaveBeenLastCalledWith({
+      deadlineAt: startedAt + 60_000,
+      reason: "timeout",
+    });
+
+    agent.report("a", "business-a", { total: 200 });
+    expect(onDeadline).toHaveBeenLastCalledWith({
+      deadlineAt: startedAt + 10_000,
+      reason: "window",
+    });
+
+    agent.report("b", "business-b", { total: 100 });
+    expect(onDeadline).toHaveBeenLastCalledWith({
+      deadlineAt: startedAt + 1_000,
+      reason: "all-settled",
+    });
+
+    vi.advanceTimersByTime(500);
+    agent.report("a", "business-a", { total: 90 });
+    expect(onDeadline).toHaveBeenLastCalledWith({
+      deadlineAt: startedAt + 1_500,
+      reason: "all-settled",
+    });
+
+    const announcementsBeforeDecision = onDeadline.mock.calls.length;
+    vi.advanceTimersByTime(1_000);
+
+    expect(agent.result).toMatchObject({ reason: "all-settled" });
+    expect(onDeadline).toHaveBeenCalledTimes(announcementsBeforeDecision);
+  });
+
+  it("keeps announcing the window when it comes before the grace period", () => {
+    const onDeadline = vi.fn<(deadline: DecisionDeadline) => void>();
+    const options = { ...defaultOptions, graceMs: 30_000 };
+    const agent = new HeadAgent(testIndustry, 1, options, vi.fn(), onDeadline);
+    const startedAt = Date.now();
+
+    agent.start();
+    agent.report("a", "business-a", { total: 100 });
+
+    expect(onDeadline).toHaveBeenLastCalledWith({
+      deadlineAt: startedAt + 10_000,
+      reason: "window",
+    });
+  });
+
+  it("decides exactly as before when nobody listens for deadlines", () => {
+    const { agent } = buildAgent(1, defaultOptions);
+
+    agent.report("a", "business-a", { total: 100 });
+    vi.advanceTimersByTime(1_000);
+
+    expect(agent.result).toMatchObject({ reason: "all-settled" });
   });
 
   it("doesn't restart the grace period when a settled call hangs up", () => {

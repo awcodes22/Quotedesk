@@ -106,6 +106,8 @@ function describeEvent(event: AgentEvent, names: BusinessNames): string {
       return describeDecision(event.decision, names);
     case "decision_pushed":
       return `Pushed ${event.command}, delivered: ${event.delivered}`;
+    case "decision_scheduled":
+      return `Deciding in ${formatElapsed(event.deadlineAt - event.at).trim()} (${event.reason})`;
     case "price_check":
       return `Price check: ${event.check.flaggedCount} of ${event.check.rows.length} lines flagged`;
     case "run_finished":

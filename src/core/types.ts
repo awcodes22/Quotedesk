@@ -12,6 +12,11 @@ export type Quote = {
 
 export type DecisionReason = "all-settled" | "window" | "timeout";
 
+export type DecisionDeadline = {
+  deadlineAt: number;
+  reason: DecisionReason;
+};
+
 export type Decision =
   | { kind: "commit"; winner: Quote; others: Quote[]; reason: DecisionReason }
   | { kind: "none"; reason: "no-quotes" };

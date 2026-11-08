@@ -13,6 +13,7 @@ import type {
   CallOutcome,
   CallStatus,
   Decision,
+  DecisionDeadline,
   IndustryConfig,
   Job,
   PriceCheck,
@@ -216,13 +217,23 @@ function createHeadAgent(
     });
   }
 
+  function announceDeadline(deadline: DecisionDeadline): void {
+    emit({ type: "decision_scheduled", runId, at: Date.now(), ...deadline });
+  }
+
   const agentOptions = {
     windowMs: options.decisionWindowMs,
     timeoutMs: options.runTimeoutMs,
     graceMs: options.settleGraceMs,
   };
 
-  return new HeadAgent(industry, expectedCalls, agentOptions, handleDecision);
+  return new HeadAgent(
+    industry,
+    expectedCalls,
+    agentOptions,
+    handleDecision,
+    announceDeadline,
+  );
 }
 
 function emitRejectedQuote(
