@@ -509,4 +509,26 @@ describe("jobs", () => {
 
     expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
   });
+
+  it("reads the header details in the order the file lists them", () => {
+    const job = loadJob("data/jobs/hotels.json");
+
+    expect(job.details).toEqual([
+      { label: "Dates", value: "Nov 20 to 22 · 2 nights" },
+    ]);
+  });
+
+  it("rejects a detail with an empty value", () => {
+    const details = [{ label: "Dates", value: "" }];
+    const path = writeJobFile({ ...hotelJob, details });
+
+    expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
+  });
+
+  it("rejects a detail with an unknown key", () => {
+    const details = [{ label: "Dates", value: "Nov 20", icon: "calendar" }];
+    const path = writeJobFile({ ...hotelJob, details });
+
+    expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
+  });
 });

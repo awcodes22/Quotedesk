@@ -32,6 +32,12 @@ export type Contact = {
   email: string;
 };
 
+// Short facts for the dashboard header, such as the dates.
+export type JobDetail = {
+  label: string;
+  value: string;
+};
+
 export type Job = {
   id: string;
   industryId: string;
@@ -40,6 +46,7 @@ export type Job = {
   businessIds?: string[];
   reference?: ReferencePrices;
   contact?: Contact;
+  details?: JobDetail[];
 };
 
 export type PriceCheckRow = {

@@ -1,0 +1,95 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+
+:root {
+  /* Neutrals */
+  --ink: #1c1917;
+  --text-2: #57534e;
+  --text-3: #a8a29e;
+  --border: #e7e5e4;
+  --fill: #f5f5f4;
+  --fill-soft: #fafaf9;
+  --tray: #f0efed;
+  --white: #ffffff;
+
+  /* Meaning: color only ever marks one of these */
+  --live: #2563eb;
+  --live-tint: #eff4ff;
+  --win: #16a34a;
+  --top4: #12b76a;
+  --no-answer: #c2412d;
+  --warning: #b45309;
+
+  /* Price scale, cheapest to priciest */
+  --price-1: #12b76a;
+  --price-2: #a6f4c5;
+  --price-3: #d1fadf;
+  --price-4: #fef0c7;
+  --price-5: #fedf89;
+  --price-gradient: linear-gradient(
+    90deg,
+    var(--price-1),
+    var(--price-2),
+    var(--price-3),
+    var(--price-4),
+    var(--price-5)
+  );
+
+  /* Grid states: background, border, icon */
+  --talking-bg: #ffffff;
+  --talking-border: 1.5px dashed #6ce9a6;
+  --talking-icon: #12b76a;
+
+  --dialing-bg: #f5f8ff;
+  --dialing-border: 1.5px dashed #a4bcfd;
+  --dialing-icon: #2563eb;
+
+  --menu-bg: #f4f3ff;
+  --menu-border: 1px solid #d9d6fe;
+  --menu-icon: #6938ef;
+
+  --hold-bg: #fffaeb;
+  --hold-border: 1px solid #fec84b;
+  --hold-icon: #dc6803;
+
+  --missed-bg: #fee4e2;
+  --missed-border: 1px solid #fecdca;
+  --missed-icon: #d92d20;
+
+  --ended-bg: #f2f4f7;
+  --ended-border: 1px solid #eaecf0;
+  --ended-icon: #98a2b3;
+
+  /* A white gap keeps the ring readable on any square color */
+  --selected-ring: 0 0 0 2px var(--white), 0 0 0 4px var(--live);
+
+  /* Cards: white, hairline border, barely-there shadow */
+  --card-border: 1px solid var(--border);
+  --card-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
+  --radius-card: 16px;
+  --radius-field: 10px;
+  --radius-square: 6px;
+
+  /* Font */
+  --font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-price: 26px;
+  --text-hero: 36px;
+
+  /* Sizes */
+  --header-height: 68px;
+  --field-height: 44px;
+  --panel-width: 400px;
+  --panel-padding: 10px;
+  --square-height: 26px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 18px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

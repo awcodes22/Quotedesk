@@ -37,7 +37,7 @@ const startRunSchema = z.strictObject({
 // Run ids become file names, so anything that could leave the runs folder is refused.
 const runIdSchema = z.string().regex(/^run-[A-Za-z0-9-]+$/);
 
-function buildJobListing(job: Job) {
+function buildJobListing(job: Job, decideWithinMs: number) {
   const industry = getIndustry(job.industryId);
   let businessCount = industry.simBusinesses.length;
 
@@ -62,6 +62,8 @@ function buildJobListing(job: Job) {
       fieldLabels: industry.fieldLabels,
     },
     reference: job.reference,
+    details: job.details,
+    decideWithinMs,
     contactName,
     businessCount,
   };
@@ -100,7 +102,10 @@ function buildApiRouter(options: AppOptions): Router {
 
   function handleListJobs(_request: Request, response: Response): void {
     const jobs = listJobs(options.jobsDirectory);
-    response.json({ jobs: jobs.map(buildJobListing) });
+    // The head agent decides by the run timeout at the latest, so that is the promise shown.
+    const decideWithinMs = options.runOptions.runTimeoutMs;
+    const listings = jobs.map((job) => buildJobListing(job, decideWithinMs));
+    response.json({ jobs: listings });
   }
 
   async function handleStartRun(

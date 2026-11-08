@@ -150,6 +150,11 @@ describe("GET /api/jobs", () => {
       title: "3-day airport rental",
       industry: { id: "car-rentals", label: "Car rentals" },
       reference: { total: 246, source: "Last trip's receipt" },
+      details: [
+        { label: "Dates", value: "Nov 20 to 23 · 3 days" },
+        { label: "Pick-up", value: "Toronto Pearson" },
+      ],
+      decideWithinMs: 5_000,
       contactName: "Jane Doe",
       businessCount: 3,
     });
