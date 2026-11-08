@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildHistogram, priceColor } from "../public/js/price.js";
+import { buildHistogram, priceColor, priceTextColor } from "../public/js/price.js";
 
 describe("priceColor", () => {
   it("colors the best quote solid green", () => {
@@ -14,6 +14,12 @@ describe("priceColor", () => {
     expect(priceColor(113, 100)).toBe("#FEF0C7");
     expect(priceColor(113.5, 100)).toBe("#FEDF89");
     expect(priceColor(500, 100)).toBe("#FEDF89");
+  });
+
+  it("pairs each fill with readable text", () => {
+    expect(priceTextColor(100, 100)).toBe("#FFFFFF");
+    expect(priceTextColor(105, 100)).toBe("#067647");
+    expect(priceTextColor(120, 100)).toBe("#B54708");
   });
 
   it("works the same for any price range", () => {

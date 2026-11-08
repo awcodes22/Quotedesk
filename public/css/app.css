@@ -251,6 +251,10 @@ p {
   background: var(--white);
 }
 
+.picker-scale {
+  width: 90px;
+}
+
 .picker-error {
   max-width: 280px;
   font-size: var(--text-sm);
@@ -301,7 +305,7 @@ p {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
   padding: 0 4px;
 }
 
@@ -323,9 +327,9 @@ p {
 
 .step + .step::before {
   content: "";
-  width: 18px;
+  width: 14px;
   height: 1px;
-  margin: 0 10px;
+  margin: 0 8px;
   background: var(--border);
 }
 
@@ -358,6 +362,7 @@ p {
 
 .view-toggle {
   display: flex;
+  flex: none;
   gap: 2px;
   margin-left: auto;
   padding: 3px;
@@ -555,6 +560,13 @@ p {
   box-shadow: var(--selected-ring);
 }
 
+.top-card.is-faded .top-card-name,
+.top-card.is-faded .top-card-price,
+.top-card.is-faded .top-card-gap,
+.top-card.is-faded .top-card-term {
+  color: var(--text-3);
+}
+
 .top-card-empty {
   align-items: center;
   justify-content: center;
@@ -622,6 +634,7 @@ p {
 }
 
 .top-card-status {
+  flex: none;
   font-weight: 600;
 }
 
@@ -629,8 +642,12 @@ p {
   font-weight: 500;
 }
 
+/* A long term gives way first, so the status and timer always stay readable. */
 .top-card-term {
+  min-width: 0;
+  overflow: hidden;
   font-weight: 500;
+  text-overflow: ellipsis;
 }
 
 /* ---------- Grid ---------- */
@@ -1063,6 +1080,7 @@ p {
 .quote-field {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 2px;
   min-width: 0;
   padding: 8px 12px;
@@ -1072,16 +1090,17 @@ p {
   border-left: var(--card-border);
 }
 
+/* Long labels wrap to a second line instead of being cut off in the 400px panel. */
 .quote-field-label {
-  overflow: hidden;
   font-size: var(--text-sm);
+  line-height: 1.25;
   color: var(--text-2);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .quote-field-value {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   font-size: var(--text-lg);
@@ -1095,9 +1114,24 @@ p {
 
 .quote-note {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
   color: var(--text-2);
+}
+
+.quote-note > svg {
+  flex: none;
+  align-self: center;
+}
+
+.quote-note-label,
+.quote-note-more {
+  flex: none;
+}
+
+.quote-note-more {
+  font-size: var(--text-sm);
+  color: var(--text-3);
 }
 
 .quote-note-text {
@@ -1263,5 +1297,424 @@ p {
 
   40% {
     opacity: 1;
+  }
+}
+
+.grid-hint {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.swatch-warning {
+  background: #fec84b;
+}
+
+/* ---------- Completed bar ---------- */
+
+.completed-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 28px;
+  height: 96px;
+  padding: 0 24px;
+}
+
+.icon-square-lg {
+  width: 48px;
+  height: 48px;
+}
+
+.completed-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.completed-title {
+  font-size: var(--text-xl);
+  font-weight: 800;
+}
+
+.completed-sentence {
+  color: var(--text-2);
+}
+
+.completed-sentence strong {
+  color: var(--ink);
+}
+
+.completed-stat {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.completed-stat-label {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.completed-stat-value {
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.button-large {
+  flex: none;
+  height: 44px;
+  padding: 0 20px;
+}
+
+/* ---------- Breakdown ---------- */
+
+.breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: calc(100vh - var(--header-height));
+  padding: 16px 24px;
+}
+
+.breakdown-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin: auto;
+  color: var(--text-2);
+}
+
+.breakdown-title-row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
+}
+
+.breakdown-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.breakdown-subtitle {
+  color: var(--text-2);
+}
+
+.breakdown-tiles {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.breakdown-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 18px;
+}
+
+.breakdown-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+}
+
+.breakdown-tile-value {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.breakdown-tile-value.tone-plain {
+  color: var(--ink);
+}
+
+.breakdown-tile-detail {
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+
+.breakdown-main {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.breakdown-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.breakdown-card-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: var(--card-border);
+}
+
+.breakdown-card-note {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.breakdown-card-note.tone-warning {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.quotes-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.quotes-table th {
+  height: 36px;
+  padding: 0 16px;
+  border-bottom: var(--card-border);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+  text-align: left;
+}
+
+.quotes-table td {
+  height: 46px;
+  padding: 0 16px;
+  border-bottom: var(--card-border);
+  white-space: nowrap;
+}
+
+.cell-strong {
+  font-weight: 600;
+}
+
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.price-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.outcome {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.outcome.tone-win,
+.outcome.tone-warning {
+  font-weight: 600;
+}
+
+.table-footer {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: auto;
+  padding: 10px 16px;
+  border-top: var(--card-border);
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.table-footer strong {
+  color: var(--ink);
+}
+
+.table-footer-link {
+  margin-left: auto;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.breakdown-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.price-check-card {
+  flex: none;
+}
+
+.price-check-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 18px 16px;
+}
+
+.price-check-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.price-check-row-head {
+  display: flex;
+  justify-content: space-between;
+}
+
+.price-check-bar {
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--fill);
+}
+
+.bar-listed {
+  background: #d0d5dd;
+}
+
+.bar-booked {
+  background: var(--top4);
+}
+
+.bar-extra {
+  background: repeating-linear-gradient(
+    135deg,
+    #f79009 0,
+    #f79009 4px,
+    #fec84b 4px,
+    #fec84b 8px
+  );
+}
+
+.price-check-text {
+  color: var(--text-2);
+}
+
+.price-check-card > .price-check-text {
+  padding: 12px 18px 16px;
+}
+
+.split-card {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.split-half {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.split-half + .split-half {
+  border-left: var(--card-border);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 18px;
+  list-style: none;
+}
+
+.timeline li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.timeline-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.timeline strong {
+  width: 40px;
+}
+
+.landing-chart {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 4px;
+  min-height: 0;
+  padding: 14px 18px 12px;
+}
+
+.landing-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.landing-track {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.landing-count {
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  text-align: center;
+}
+
+.landing-bar {
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+
+/* ---------- Narrow screens, down to 1280 ---------- */
+
+@media (max-width: 1400px) {
+  .hero-top {
+    gap: 10px;
+  }
+
+  .step {
+    gap: 4px;
+    font-size: 13px;
+  }
+
+  .step + .step::before {
+    width: 8px;
+    margin: 0 5px;
+  }
+
+  .view-toggle-option {
+    padding: 0 8px;
+    font-size: 13px;
+  }
+
+  /* Ten labels don't fit under a narrow chart, so every other one is left out. */
+  .chart-column:nth-child(even) .chart-label {
+    visibility: hidden;
   }
 }

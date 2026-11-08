@@ -1,77 +1,70 @@
 // @ts-check
 import { clear, el, icon } from "../dom.js";
 import { formatClock, formatDuration, pluralize } from "../format.js";
-import { runElapsedMs } from "./view.js";
+import { ICONS } from "../icons.js";
+import { findBusinessNoun, runElapsedMs } from "./view.js";
 
 /**
  * @typedef {import("./view.js").View} View
  * @typedef {import("./view.js").JobListing} JobListing
  * @typedef {import("../icons.js").IconName} IconName
+ * @typedef {import("../../../src/core/types").Job} Job
  *
  * @typedef {{ icon: IconName | null, label: string, value: string }} RequestField
  * @typedef {{ fields: RequestField[], finished: boolean, elapsed: string }} RunHeaderModel
- * @typedef {{ jobId: string, provider: "fake" | "text" }} StartRequest
+ * @typedef {{ jobId: string, provider: "fake" | "text", scale?: number }} StartRequest
+ * @typedef {{ fields: HTMLElement, right: HTMLElement }} HeaderFrame
  */
 
 /**
- * @typedef {{
- *   lookingFor: string,
- *   details: { label: string, value: string }[],
- *   callCount: number,
- *   decideWithinMs: number | null,
- *   contactName: string | null,
- * }} FieldSource
+ * The server only accepts known icon names, and this keeps the page safe if that ever changes.
+ * @param {string | undefined} name
+ * @returns {IconName | null}
  */
+function findIconName(name) {
+  if (name === undefined || Object.hasOwn(ICONS, name) === false) {
+    return null;
+  }
+
+  return /** @type {IconName} */ (name);
+}
 
 /**
  * Skips anything the job doesn't have, so every job gets a header that fits it.
- * @param {FieldSource} source
+ * @param {Job} job
+ * @param {string} industryLabel
+ * @param {number} callCount
+ * @param {JobListing | null} listing
  * @returns {RequestField[]}
  */
-function buildRequestFields(source) {
-  /** @type {RequestField[]} */
-  const fields = [{ icon: "search", label: "Looking for", value: source.lookingFor }];
+export function buildRequestFields(job, industryLabel, callCount, listing) {
+  const noun = findBusinessNoun(listing);
 
-  for (const detail of source.details) {
-    fields.push({ icon: null, label: detail.label, value: detail.value });
+  /** @type {RequestField[]} */
+  const fields = [{ icon: "search", label: "Looking for", value: industryLabel }];
+
+  if (job.details !== undefined) {
+    for (const detail of job.details) {
+      fields.push({ icon: findIconName(detail.icon), label: detail.label, value: detail.value });
+    }
   }
 
   fields.push({
     icon: "phone",
     label: "Calling",
-    value: pluralize(source.callCount, "business", "businesses"),
+    value: pluralize(callCount, noun.singular, noun.plural),
   });
 
-  if (source.decideWithinMs !== null) {
-    const decideWithin = formatDuration(source.decideWithinMs);
+  if (listing !== null) {
+    const decideWithin = formatDuration(listing.decideWithinMs);
     fields.push({ icon: "clock", label: "Decide", value: `Within ${decideWithin}` });
   }
 
-  if (source.contactName !== null) {
-    fields.push({ icon: "user", label: "Booking for", value: source.contactName });
+  if (job.contact !== undefined) {
+    fields.push({ icon: "user", label: "Booking for", value: job.contact.name });
   }
 
   return fields;
-}
-
-/**
- * @param {JobListing} listing
- * @returns {RequestField[]}
- */
-function buildListingFields(listing) {
-  let details = /** @type {{ label: string, value: string }[]} */ ([]);
-
-  if (listing.details !== undefined) {
-    details = listing.details;
-  }
-
-  return buildRequestFields({
-    lookingFor: listing.industry.label,
-    details,
-    callCount: listing.businessCount,
-    decideWithinMs: listing.decideWithinMs,
-    contactName: listing.contactName,
-  });
 }
 
 /**
@@ -79,30 +72,12 @@ function buildListingFields(listing) {
  * @returns {RunHeaderModel}
  */
 export function selectRunHeaderModel(view) {
-  const { state, listing } = view;
-  let details = /** @type {{ label: string, value: string }[]} */ ([]);
-  let decideWithinMs = null;
-  let contactName = null;
+  const { state } = view;
+  let fields = /** @type {RequestField[]} */ ([]);
 
-  if (state.job !== null && state.job.details !== undefined) {
-    details = state.job.details;
+  if (state.job !== null) {
+    fields = buildRequestFields(state.job, state.industryLabel, state.callOrder.length, view.listing);
   }
-
-  if (state.job !== null && state.job.contact !== undefined) {
-    contactName = state.job.contact.name;
-  }
-
-  if (listing !== null) {
-    decideWithinMs = listing.decideWithinMs;
-  }
-
-  const fields = buildRequestFields({
-    lookingFor: state.industryLabel,
-    details,
-    callCount: state.callOrder.length,
-    decideWithinMs,
-    contactName,
-  });
 
   return {
     fields,
@@ -135,7 +110,7 @@ function renderField(field) {
  * @param {HTMLElement} container
  * @param {RequestField[]} fields
  */
-function renderFields(container, fields) {
+export function renderFields(container, fields) {
   clear(container);
 
   for (const field of fields) {
@@ -163,32 +138,16 @@ function renderRunStatus(model) {
   ]);
 }
 
-/**
- * The engine has no way to cancel a run yet, so Stop says so instead of pretending.
- * @param {RunHeaderModel} model
- * @returns {HTMLElement}
- */
-function renderRunAction(model) {
-  if (model.finished) {
-    return el("a", { class: "button", href: "/" }, ["New run"]);
-  }
-
-  return el(
-    "button",
-    {
-      class: "button",
-      type: "button",
-      disabled: true,
-      title: "Stopping a run early isn't supported yet.",
-    },
-    ["Stop"],
-  );
+/** @returns {HTMLElement} */
+export function renderNewRunButton() {
+  return el("a", { class: "button", href: "/" }, ["New run"]);
 }
 
 /**
  * @param {HTMLElement} header
+ * @returns {HeaderFrame}
  */
-function buildHeaderFrame(header) {
+export function buildHeaderFrame(header) {
   clear(header);
   const fields = el("div", { class: "request-fields" });
   const right = el("div", { class: "topbar-right" });
@@ -200,6 +159,7 @@ function buildHeaderFrame(header) {
 }
 
 /**
+ * The engine can't cancel a run yet, so a live run has no Stop button.
  * @param {HTMLElement} header
  */
 export function createRunHeader(header) {
@@ -210,7 +170,10 @@ export function createRunHeader(header) {
     renderFields(frame.fields, model.fields);
     clear(frame.right);
     frame.right.appendChild(renderRunStatus(model));
-    frame.right.appendChild(renderRunAction(model));
+
+    if (model.finished) {
+      frame.right.appendChild(renderNewRunButton());
+    }
   }
 
   return { update };
@@ -238,6 +201,19 @@ function renderProviderSelect() {
   ]);
 }
 
+/** @returns {HTMLInputElement} */
+function renderScaleInput() {
+  return el("input", {
+    class: "picker-select picker-scale",
+    type: "number",
+    min: 1,
+    max: 120,
+    placeholder: "Scale",
+    "aria-label": "Scale: number of fake calls",
+    title: "Clone the businesses up to this many fake calls",
+  });
+}
+
 /**
  * @param {string} value
  * @returns {"fake" | "text"}
@@ -251,6 +227,21 @@ function readProvider(value) {
 }
 
 /**
+ * An empty box means a normal run with the job's own businesses.
+ * @param {"fake" | "text"} provider
+ * @param {HTMLInputElement} scaleInput
+ * @returns {StartRequest["scale"]}
+ */
+function readScale(provider, scaleInput) {
+  if (provider !== "fake" || scaleInput.value.trim() === "") {
+    return undefined;
+  }
+
+  return Number(scaleInput.value);
+}
+
+/**
+ * Before a run, the header holds only the picker; the request fields arrive with the run.
  * @param {HTMLElement} header
  * @param {JobListing[]} jobs
  * @param {(request: StartRequest) => Promise<string | null>} onStart Resolves with an error to show, or null.
@@ -259,30 +250,30 @@ export function createPickerHeader(header, jobs, onStart) {
   const frame = buildHeaderFrame(header);
   const jobSelect = renderJobSelect(jobs);
   const providerSelect = renderProviderSelect();
+  const scaleInput = renderScaleInput();
   const startButton = el("button", { class: "button button-primary", type: "button" }, [
     "Start calls",
   ]);
   const errorText = el("span", { class: "picker-error", role: "alert" });
 
-  function showPickedJob() {
-    const job = jobs.find((candidate) => candidate.id === jobSelect.value);
-
-    if (job === undefined) {
-      clear(frame.fields);
-      return;
-    }
-
-    renderFields(frame.fields, buildListingFields(job));
+  function showScaleForFakeCalls() {
+    scaleInput.hidden = providerSelect.value !== "fake";
   }
 
   async function startCalls() {
     startButton.disabled = true;
     errorText.textContent = "";
 
-    const error = await onStart({
-      jobId: jobSelect.value,
-      provider: readProvider(providerSelect.value),
-    });
+    const provider = readProvider(providerSelect.value);
+    /** @type {StartRequest} */
+    const request = { jobId: jobSelect.value, provider };
+    const scale = readScale(provider, scaleInput);
+
+    if (scale !== undefined) {
+      request.scale = scale;
+    }
+
+    const error = await onStart(request);
 
     if (error !== null) {
       errorText.textContent = error;
@@ -290,11 +281,11 @@ export function createPickerHeader(header, jobs, onStart) {
     }
   }
 
-  jobSelect.addEventListener("change", showPickedJob);
+  providerSelect.addEventListener("change", showScaleForFakeCalls);
   startButton.addEventListener("click", startCalls);
   frame.right.appendChild(errorText);
   frame.right.appendChild(jobSelect);
   frame.right.appendChild(providerSelect);
+  frame.right.appendChild(scaleInput);
   frame.right.appendChild(startButton);
-  showPickedJob();
 }

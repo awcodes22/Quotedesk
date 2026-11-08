@@ -36,6 +36,7 @@ export type Contact = {
 export type JobDetail = {
   label: string;
   value: string;
+  icon?: string;
 };
 
 export type Job = {
@@ -121,10 +122,17 @@ export type FieldLabel = {
   no: string;
 };
 
+// How the dashboard names the businesses it calls, as in "120 hotels".
+export type BusinessNoun = {
+  singular: string;
+  plural: string;
+};
+
 export type IndustryConfig = {
   id: string;
   label: string;
   clientNoun: string;
+  businessNoun: BusinessNoun;
   goal: string;
   quoteSchema: z.ZodType<QuoteFields>;
   followUps: string[];

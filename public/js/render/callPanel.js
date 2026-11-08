@@ -82,6 +82,12 @@ function countCallerTurns(call) {
  * @returns {string}
  */
 function buildCallMeta(view, call) {
+  const startedAt = view.state.startedAt;
+
+  if (call.endedAt !== null && startedAt !== null) {
+    return `Call ended at ${formatClock(call.endedAt - startedAt)}`;
+  }
+
   const timer = formatClock(callElapsedMs(call, view.now));
   const turns = countCallerTurns(call);
 
@@ -90,6 +96,27 @@ function buildCallMeta(view, call) {
   }
 
   return `${timer} · turn ${turns}`;
+}
+
+/** @type {Record<"pending" | "success" | "warning", StatusText["tone"]>} */
+const OUTCOME_TONES = { pending: "live", success: "win", warning: "warning" };
+
+/**
+ * The winner shows how the booking went instead of the raw line status.
+ * @param {View} view
+ * @param {CallState} call
+ * @returns {StatusText}
+ */
+function findCallStatus(view, call) {
+  const decision = view.state.decision;
+  const outcome = selectOutcomeLabel(view.state);
+  const isWinner = decision !== null && decision.kind === "commit" && decision.winner.callId === call.callId;
+
+  if (isWinner && outcome !== null) {
+    return { text: outcome.text, tone: OUTCOME_TONES[outcome.tone] };
+  }
+
+  return describeCallStatus(call.status);
 }
 
 /**
@@ -108,7 +135,7 @@ function buildCallCard(view, call) {
     name: call.name,
     initials: initials(call.name),
     subtitle,
-    status: describeCallStatus(call.status),
+    status: findCallStatus(view, call),
     meta: buildCallMeta(view, call),
   };
 }
@@ -163,9 +190,10 @@ function buildQuoteFields(view, call) {
 
 /**
  * @param {RankedQuote | undefined} ranked
+ * @param {boolean} decided
  * @returns {{ gapText: string, gapTone: QuoteCardModel["gapTone"] }}
  */
-function describeGap(ranked) {
+function describeGap(ranked, decided) {
   if (ranked === undefined) {
     return { gapText: "", gapTone: "muted" };
   }
@@ -174,6 +202,10 @@ function describeGap(ranked) {
 
   if (ranked.rank === 1 && saving > 0) {
     return { gapText: `${formatMoney(saving)} less than first quote`, gapTone: "win" };
+  }
+
+  if (ranked.rank === 1 && decided) {
+    return { gapText: "Lowest total", gapTone: "win" };
   }
 
   if (ranked.rank === 1) {
@@ -208,7 +240,7 @@ function buildQuoteCard(view, call, ranking) {
     heading,
     rank,
     price,
-    ...describeGap(ranked),
+    ...describeGap(ranked, view.state.decision !== null),
     fields: buildQuoteFields(view, call),
     notes: call.notes,
   };
@@ -380,6 +412,18 @@ export function selectCallPanelModel(view, call) {
 }
 
 /**
+ * @param {StatusText} status
+ * @returns {Element}
+ */
+function renderStatusMarker(status) {
+  if (status.tone === "win") {
+    return icon("check", 14);
+  }
+
+  return el("span", { class: "status-dot" });
+}
+
+/**
  * @param {HTMLElement} card
  * @param {CallCardModel} model
  */
@@ -395,7 +439,7 @@ function renderCallCard(card, model) {
   card.appendChild(
     el("div", { class: "call-card-status" }, [
       el("span", { class: `status-text tone-${model.status.tone}` }, [
-        el("span", { class: "status-dot" }),
+        renderStatusMarker(model.status),
         model.status.text,
       ]),
       el("span", { class: "call-card-meta tabular" }, [model.meta]),
@@ -457,14 +501,22 @@ function renderQuoteCard(card, model) {
     fields,
   ]);
 
-  for (const note of model.notes) {
-    body.appendChild(
-      el("div", { class: "quote-note" }, [
-        icon("file-text", 16),
-        el("span", { class: "quote-note-label" }, ["Note:"]),
-        el("span", { class: "quote-note-text" }, [note]),
-      ]),
-    );
+  // Only the newest note fits next to the transcript; the rest stay in the transcript itself.
+  const latestNote = model.notes[model.notes.length - 1];
+
+  if (latestNote !== undefined) {
+    const note = el("div", { class: "quote-note" }, [
+      icon("file-text", 16),
+      el("span", { class: "quote-note-label" }, ["Note:"]),
+      el("span", { class: "quote-note-text" }, [latestNote]),
+    ]);
+    const earlierCount = model.notes.length - 1;
+
+    if (earlierCount > 0) {
+      note.appendChild(el("span", { class: "quote-note-more" }, [`+${earlierCount} earlier`]));
+    }
+
+    body.appendChild(note);
   }
 
   card.appendChild(body);

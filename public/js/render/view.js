@@ -9,6 +9,7 @@ import { capitalize } from "../format.js";
  * @typedef {import("../../../src/core/types").FieldLabel} FieldLabel
  * @typedef {import("../../../src/core/types").JobDetail} JobDetail
  * @typedef {import("../../../src/core/types").ReferencePrices} ReferencePrices
+ * @typedef {import("../../../src/core/types").BusinessNoun} BusinessNoun
  *
  * @typedef {{
  *   id: string,
@@ -18,6 +19,7 @@ import { capitalize } from "../format.js";
  *     id: string,
  *     label: string,
  *     clientNoun: string,
+ *     businessNoun: BusinessNoun,
  *     fieldLabels?: Record<string, FieldLabel>,
  *   },
  *   reference?: ReferencePrices,
@@ -42,7 +44,7 @@ import { capitalize } from "../format.js";
  *   ended: boolean,
  * }} View
  *
- * @typedef {"live" | "muted" | "alert"} StatusTone
+ * @typedef {"live" | "muted" | "alert" | "win" | "warning"} StatusTone
  * @typedef {{ text: string, tone: StatusTone }} StatusText
  * @typedef {{ text: string, isCatch: boolean }} KeyTerm
  */
@@ -115,6 +117,21 @@ export function findFieldLabels(view) {
   }
 
   return view.listing.industry.fieldLabels;
+}
+
+/** @type {BusinessNoun} */
+const DEFAULT_NOUN = { singular: "business", plural: "businesses" };
+
+/**
+ * @param {JobListing | null} listing
+ * @returns {BusinessNoun}
+ */
+export function findBusinessNoun(listing) {
+  if (listing === null) {
+    return DEFAULT_NOUN;
+  }
+
+  return listing.industry.businessNoun;
 }
 
 /**

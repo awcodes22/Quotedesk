@@ -5,17 +5,27 @@ import type { RunOptions } from "../core/run";
 import type { IndustryConfig, Job } from "../core/types";
 import { getIndustry } from "../industries/index";
 import { listJobs } from "../jobs";
+import type { FakeProviderOptions } from "../providers/fake";
 import type { CallProvider } from "../providers/types";
+import { scaleRun } from "../scale";
 
 export type StartRunRequest = {
   jobId: string;
   provider: string;
+  scale?: number;
 };
 
 export type StartRunSettings = {
   jobsDirectory: string;
   runOptions: RunOptions;
-  createProvider: (name: string) => CallProvider;
+  createProvider: (name: string, fakeOptions?: FakeProviderOptions) => CallProvider;
+};
+
+type PreparedRun = {
+  job: Job;
+  industry: IndustryConfig;
+  runOptions: RunOptions;
+  fakeOptions: FakeProviderOptions;
 };
 
 export type StartRunResult =
@@ -71,9 +81,41 @@ async function launchRun(
 function createProviderSafely(
   settings: StartRunSettings,
   name: string,
+  fakeOptions: FakeProviderOptions,
 ): CallProvider | string {
   try {
-    return settings.createProvider(name);
+    return settings.createProvider(name, fakeOptions);
+  } catch (error) {
+    return getErrorMessage(error);
+  }
+}
+
+// Fake calls cost nothing, so a scaled demo dials every business at once.
+function prepareRun(
+  request: StartRunRequest,
+  job: Job,
+  settings: StartRunSettings,
+): PreparedRun | string {
+  const industry = getIndustry(job.industryId);
+
+  if (request.scale === undefined) {
+    return { job, industry, runOptions: settings.runOptions, fakeOptions: {} };
+  }
+
+  if (request.provider !== "fake") {
+    return "Scale only works with the fake provider.";
+  }
+
+  try {
+    const scaled = scaleRun(job, industry, request.scale);
+    const parallelCalls = scaled.industry.simBusinesses.length;
+
+    return {
+      job: scaled.job,
+      industry: scaled.industry,
+      runOptions: { ...settings.runOptions, maxParallelCalls: parallelCalls },
+      fakeOptions: { failBusinessIds: scaled.noAnswerIds },
+    };
   } catch (error) {
     return getErrorMessage(error);
   }
@@ -93,16 +135,25 @@ export async function startRun(
     return { ok: false, status: 404, error: `Unknown job "${request.jobId}".` };
   }
 
-  const provider = createProviderSafely(settings, request.provider);
+  const prepared = prepareRun(request, job, settings);
+
+  if (typeof prepared === "string") {
+    return { ok: false, status: 400, error: prepared };
+  }
+
+  const provider = createProviderSafely(settings, request.provider, prepared.fakeOptions);
 
   if (typeof provider === "string") {
     return { ok: false, status: 400, error: provider };
   }
 
-  const industry = getIndustry(job.industryId);
-
   try {
-    const runId = await launchRun(job, industry, provider, settings.runOptions);
+    const runId = await launchRun(
+      prepared.job,
+      prepared.industry,
+      provider,
+      prepared.runOptions,
+    );
     return { ok: true, runId };
   } catch (error) {
     return { ok: false, status: 400, error: getErrorMessage(error) };

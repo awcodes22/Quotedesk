@@ -514,7 +514,7 @@ describe("jobs", () => {
     const job = loadJob("data/jobs/hotels.json");
 
     expect(job.details).toEqual([
-      { label: "Dates", value: "Nov 20 to 22 · 2 nights" },
+      { label: "Dates", value: "Nov 20 to 22 · 2 nights", icon: "calendar" },
     ]);
   });
 
@@ -525,8 +525,15 @@ describe("jobs", () => {
     expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
   });
 
+  it("rejects a detail icon the dashboard doesn't have", () => {
+    const details = [{ label: "Dates", value: "Nov 20", icon: "rocket" }];
+    const path = writeJobFile({ ...hotelJob, details });
+
+    expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);
+  });
+
   it("rejects a detail with an unknown key", () => {
-    const details = [{ label: "Dates", value: "Nov 20", icon: "calendar" }];
+    const details = [{ label: "Dates", value: "Nov 20", color: "blue" }];
     const path = writeJobFile({ ...hotelJob, details });
 
     expect(() => loadJob(path)).toThrow(`Invalid job file ${path}`);

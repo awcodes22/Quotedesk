@@ -22,7 +22,7 @@ const app = createApp({
     priceFlagPct: config.PRICE_FLAG_PCT,
   },
   maxTurns: config.MAX_TURNS,
-  createProvider: (name) => createProvider(name, config),
+  createProvider: (name, fakeOptions) => createProvider(name, config, fakeOptions),
   registry,
 });
 

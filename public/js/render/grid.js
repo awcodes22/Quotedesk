@@ -30,7 +30,7 @@ import {
  *   selected: boolean,
  *   dim: boolean,
  * }} SquareModel
- * @typedef {{ chips: ChipModel[], squares: SquareModel[] }} GridModel
+ * @typedef {{ chips: ChipModel[], squares: SquareModel[], finished: boolean }} GridModel
  *
  * @typedef {{
  *   onSelect: (callId: string) => void,
@@ -42,7 +42,7 @@ import {
 
 /** @type {Record<GridState, string>} */
 const CHIP_LABELS = {
-  winner: "Winner",
+  winner: "Booked",
   quoted: "Quoted",
   talking: "Talking",
   dialing: "Dialing",
@@ -184,7 +184,7 @@ export function selectGridModel(view) {
   }
 
   const squares = calls.map((call) => buildSquare(view, call, topCallIds, best));
-  return { chips: buildChips(view), squares };
+  return { chips: buildChips(view), squares, finished: view.state.finishedAt !== null };
 }
 
 /**
@@ -302,6 +302,22 @@ function renderLegend() {
   ]);
 }
 
+/** @returns {HTMLElement} */
+function renderFinishedBar() {
+  return el("div", { class: "grid-bar" }, [
+    el("div", { class: "grid-legend" }, [
+      el("span", { class: "legend-item" }, [el("span", { class: "swatch swatch-winner" }), "Booked"]),
+      el("span", { class: "legend-item" }, [
+        "Cheaper",
+        el("span", { class: "price-bar" }),
+        "Pricier",
+      ]),
+      el("span", { class: "legend-item" }, ["Every line is closed"]),
+    ]),
+    el("span", { class: "grid-hint" }, ["Click any square to read its call"]),
+  ]);
+}
+
 /**
  * @param {GridActions} actions
  * @returns {HTMLElement}
@@ -345,8 +361,13 @@ export function createGrid(card, actions) {
   let lastOrder = "";
   let lastChips = "";
 
+  const liveBar = el("div", { class: "grid-bar" }, [renderLegend(), renderTools(actions)]);
+  const finishedBar = renderFinishedBar();
+
+  finishedBar.hidden = true;
   card.appendChild(chips);
-  card.appendChild(el("div", { class: "grid-bar" }, [renderLegend(), renderTools(actions)]));
+  card.appendChild(liveBar);
+  card.appendChild(finishedBar);
   card.appendChild(squares);
 
   /** @param {ChipModel[]} chipModels */
@@ -413,6 +434,8 @@ export function createGrid(card, actions) {
 
   /** @param {GridModel} model */
   function update(model) {
+    liveBar.hidden = model.finished;
+    finishedBar.hidden = model.finished === false;
     updateChips(model.chips);
     updateSquares(model.squares);
   }

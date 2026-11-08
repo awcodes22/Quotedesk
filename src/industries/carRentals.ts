@@ -137,6 +137,7 @@ const harbourfrontCarRentals: SimBusiness = {
 export const carRentals: IndustryConfig = {
   id: "car-rentals",
   label: "Car rentals",
+  businessNoun: { singular: "rental desk", plural: "rental desks" },
   clientNoun: "a traveller",
   goal: "Get the daily rate, the insurance cost per day, any fees, the total for the rental, and whether mileage is unlimited.",
   quoteSchema,

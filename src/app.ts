@@ -13,7 +13,9 @@ import type { RunOptions } from "./core/run";
 import type { Job } from "./core/types";
 import { getIndustry } from "./industries/index";
 import { listJobs } from "./jobs";
+import type { FakeProviderOptions } from "./providers/fake";
 import type { CallProvider } from "./providers/types";
+import { MAX_SCALE } from "./scale";
 import { streamLiveEvents, streamRecordedEvents } from "./api/eventStream";
 import { readRecordedEvents } from "./api/registry";
 import type { RunRegistry } from "./api/registry";
@@ -26,13 +28,14 @@ export type AppOptions = {
   publicDirectory: string;
   runOptions: RunOptions;
   maxTurns: number;
-  createProvider: (name: string) => CallProvider;
+  createProvider: (name: string, fakeOptions?: FakeProviderOptions) => CallProvider;
   registry: RunRegistry;
 };
 
 const startRunSchema = z.strictObject({
   jobId: z.string().min(1),
   provider: z.enum(["fake", "text"]),
+  scale: z.number().int().min(1).max(MAX_SCALE).optional(),
 });
 
 // Run ids become file names, so anything that could leave the runs folder is refused.
@@ -65,6 +68,7 @@ function buildJobListing(job: Job, limits: ListingLimits) {
       id: industry.id,
       label: industry.label,
       clientNoun: industry.clientNoun,
+      businessNoun: industry.businessNoun,
       fieldLabels: industry.fieldLabels,
     },
     reference: job.reference,

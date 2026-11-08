@@ -39,6 +39,7 @@ export type RunSummary = {
   durationMs: number;
   decision: { kind: Decision["kind"]; reason: DecisionReason | "no-quotes" };
   winner: SummaryQuote | null;
+  bookingConfirmed: boolean | null;
   quotes: SummaryQuote[];
   priceCheck: PriceCheck | null;
   milestones: Milestone[];
@@ -251,6 +252,25 @@ function buildStats(job: Job, quotes: SummaryQuote[]): RunSummary["stats"] {
   };
 }
 
+// Booked only when the winner's call finished normally after hearing the commit.
+function isBookingConfirmed(report: RunReport): boolean | null {
+  const { decision } = report;
+
+  if (decision.kind === "none") {
+    return null;
+  }
+
+  const winnerCall = report.calls.find(
+    (call) => call.callId === decision.winner.callId,
+  );
+
+  if (winnerCall === undefined) {
+    return false;
+  }
+
+  return winnerCall.status === "completed" && winnerCall.command === "commit";
+}
+
 function nullWhenMissing<Value>(value: Value | undefined): Value | null {
   if (value === undefined) {
     return null;
@@ -282,6 +302,7 @@ export function summarizeRun(events: AgentEvent[]): RunSummary | undefined {
     durationMs: report.endedAt - report.startedAt,
     decision: { kind: report.decision.kind, reason: report.decision.reason },
     winner: nullWhenMissing(quotes[0]),
+    bookingConfirmed: isBookingConfirmed(report),
     quotes,
     priceCheck: nullWhenMissing(report.priceCheck),
     milestones: buildMilestones(events, report.startedAt),

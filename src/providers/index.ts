@@ -1,5 +1,6 @@
 import type { Config } from "../config";
 import { fakeProvider } from "./fake";
+import type { FakeProviderOptions } from "./fake";
 import { openAIChat, textSimProvider } from "./textSim";
 import type { CallProvider } from "./types";
 
@@ -30,13 +31,14 @@ function createTextProvider(config: ProviderConfig): CallProvider {
 export function createProvider(
   name: string,
   config: ProviderConfig,
+  fakeOptions: FakeProviderOptions = {},
 ): CallProvider {
   if (name === "text") {
     return createTextProvider(config);
   }
 
   if (name === "fake") {
-    return fakeProvider();
+    return fakeProvider(fakeOptions);
   }
 
   throw new Error(`Unknown provider "${name}". Valid providers: fake, text`);

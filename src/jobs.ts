@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { ICONS } from "../public/js/icons.js";
 import type { Job } from "./core/types";
 
 // Prices must be positive because the price check divides by them.
@@ -15,9 +16,13 @@ const contactSchema = z.strictObject({
   email: z.email(),
 });
 
+// The dashboard draws these icons, so a job may only name one it actually has.
+const iconNames = Object.keys(ICONS) as [string, ...string[]];
+
 const detailSchema = z.strictObject({
   label: z.string().min(1),
   value: z.string().min(1),
+  icon: z.enum(iconNames).optional(),
 });
 
 // Strict, so a misspelled businessIds fails instead of silently calling everyone.

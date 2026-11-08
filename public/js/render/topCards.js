@@ -27,15 +27,17 @@ import {
  *   term: KeyTerm | null,
  *   status: CardStatus,
  *   isLeader: boolean,
+ *   faded: boolean,
  *   selected: boolean,
  * }} TopCardModel
- * @typedef {{ cards: TopCardModel[] }} TopCardsModel
+ * @typedef {{ cards: TopCardModel[], finished: boolean }} TopCardsModel
  */
 
 const SLOT_COUNT = 4;
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const LEADER_LINE = "#12B76A";
 const OTHER_LINE = "#6CE9A6";
+const CLOSED_LINE = "#D0D5DD";
 
 /**
  * @param {View} view
@@ -65,7 +67,7 @@ function findCardStatus(view, quote) {
   }
 
   if (state.decision !== null) {
-    return { text: "Closed", tone: "muted" };
+    return { text: "Closed politely", tone: "muted" };
   }
 
   if (isLeader) {
@@ -114,6 +116,7 @@ function buildCard(view, quote) {
     term: findKeyTerm(quote.fields, findFieldLabels(view)),
     status: findCardStatus(view, quote),
     isLeader,
+    faded: view.state.finishedAt !== null && isLeader === false,
     selected: view.selectedCallId === quote.callId,
   };
 }
@@ -124,7 +127,7 @@ function buildCard(view, quote) {
  */
 export function selectTopCardsModel(view) {
   const cards = selectTopFour(view.state).map((quote) => buildCard(view, quote));
-  return { cards };
+  return { cards, finished: view.state.finishedAt !== null };
 }
 
 /**
@@ -191,6 +194,10 @@ function renderCard(card, onSelect) {
     className += " is-selected";
   }
 
+  if (card.faded) {
+    className += " is-faded";
+  }
+
   const button = el("button", { class: className, type: "button" }, [
     el("div", { class: "top-card-head" }, [
       el("span", { class: "avatar" }, [card.initials]),
@@ -222,11 +229,38 @@ function buildCurve(startX, endX, height) {
 }
 
 /**
+ * The winner keeps a solid line; once the run is over, the closed calls fade to dotted grey.
+ * @param {SVGPathElement} path
+ * @param {boolean} isLeader
+ * @param {boolean} finished
+ */
+function styleConnector(path, isLeader, finished) {
+  if (isLeader) {
+    path.setAttribute("stroke", LEADER_LINE);
+    path.setAttribute("stroke-width", "2.5");
+    return;
+  }
+
+  if (finished) {
+    path.setAttribute("stroke", CLOSED_LINE);
+    path.setAttribute("stroke-width", "1.5");
+    path.setAttribute("stroke-dasharray", "1 4");
+    path.setAttribute("stroke-linecap", "round");
+    return;
+  }
+
+  path.setAttribute("stroke", OTHER_LINE);
+  path.setAttribute("stroke-width", "1.5");
+  path.setAttribute("stroke-dasharray", "4 4");
+}
+
+/**
  * @param {SVGSVGElement} svg
  * @param {HTMLElement} row
  * @param {number} cardCount
+ * @param {boolean} finished
  */
-function drawConnectors(svg, row, cardCount) {
+function drawConnectors(svg, row, cardCount, finished) {
   clear(svg);
 
   const width = svg.clientWidth;
@@ -248,16 +282,7 @@ function drawConnectors(svg, row, cardCount) {
 
     path.setAttribute("d", buildCurve(startX, endX, height));
     path.setAttribute("fill", "none");
-
-    if (index === 0) {
-      path.setAttribute("stroke", LEADER_LINE);
-      path.setAttribute("stroke-width", "2.5");
-    } else {
-      path.setAttribute("stroke", OTHER_LINE);
-      path.setAttribute("stroke-width", "1.5");
-      path.setAttribute("stroke-dasharray", "4 4");
-    }
-
+    styleConnector(path, index === 0, finished);
     svg.appendChild(path);
   }
 }
@@ -270,6 +295,7 @@ export function createTopCards(container, onSelect) {
   const svg = document.createElementNS(SVG_NAMESPACE, "svg");
   const row = el("div", { class: "top-cards" });
   let cardCount = 0;
+  let finished = false;
 
   svg.setAttribute("class", "connectors");
   svg.setAttribute("aria-hidden", "true");
@@ -277,13 +303,14 @@ export function createTopCards(container, onSelect) {
   container.appendChild(row);
 
   // Card positions follow the page width, so the lines are redrawn when it changes.
-  const resizeObserver = new ResizeObserver(() => drawConnectors(svg, row, cardCount));
+  const resizeObserver = new ResizeObserver(() => drawConnectors(svg, row, cardCount, finished));
   resizeObserver.observe(row);
 
   /** @param {TopCardsModel} model */
   function update(model) {
     clear(row);
     cardCount = model.cards.length;
+    finished = model.finished;
 
     for (let index = 0; index < SLOT_COUNT; index += 1) {
       const card = model.cards[index];
@@ -295,7 +322,7 @@ export function createTopCards(container, onSelect) {
       }
     }
 
-    drawConnectors(svg, row, cardCount);
+    drawConnectors(svg, row, cardCount, finished);
   }
 
   return { update };

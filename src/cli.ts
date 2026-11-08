@@ -7,6 +7,7 @@ import { runJob } from "./core/run";
 import type {
   Decision,
   IndustryConfig,
+  Job,
   PriceCheck,
   PriceCheckRow,
   Quote,
@@ -15,6 +16,9 @@ import type {
 import { getIndustry } from "./industries/index";
 import { loadJob } from "./jobs";
 import { createProvider } from "./providers/index";
+import type { FakeProviderOptions } from "./providers/fake";
+import type { RunOptions } from "./core/run";
+import { scaleRun } from "./scale";
 
 const RUNS_DIRECTORY = "runs";
 const SOURCE_COLUMN_WIDTH = 26;
@@ -27,6 +31,14 @@ type BusinessNames = Map<string, string>;
 type CliArguments = {
   jobPath: string;
   providerName: string;
+  scale: number | undefined;
+};
+
+type PreparedRun = {
+  job: Job;
+  industry: IndustryConfig;
+  fakeOptions: FakeProviderOptions;
+  maxParallelCalls: number;
 };
 
 function readArguments(): CliArguments {
@@ -34,22 +46,50 @@ function readArguments(): CliArguments {
     options: {
       job: { type: "string" },
       provider: { type: "string" },
+      scale: { type: "string" },
     },
   });
 
   if (values.job === undefined) {
     throw new Error(
-      "Usage: npm run job -- --job <path to job file> [--provider fake|text]",
+      "Usage: npm run job -- --job <path to job file> [--provider fake|text] [--scale N]",
     );
   }
 
   let providerName: string = config.PROVIDER;
+  let scale: number | undefined = undefined;
 
   if (values.provider !== undefined) {
     providerName = values.provider;
   }
 
-  return { jobPath: values.job, providerName };
+  if (values.scale !== undefined) {
+    scale = Number(values.scale);
+  }
+
+  return { jobPath: values.job, providerName, scale };
+}
+
+// Fake calls cost nothing, so a scaled demo dials every business at once.
+function prepareRun(job: Job, providerName: string, scale: number | undefined): PreparedRun {
+  const industry = getIndustry(job.industryId);
+
+  if (scale === undefined) {
+    return { job, industry, fakeOptions: {}, maxParallelCalls: config.MAX_PARALLEL_CALLS };
+  }
+
+  if (providerName !== "fake") {
+    throw new Error("--scale only works with the fake provider.");
+  }
+
+  const scaled = scaleRun(job, industry, scale);
+
+  return {
+    job: scaled.job,
+    industry: scaled.industry,
+    fakeOptions: { failBusinessIds: scaled.noAnswerIds },
+    maxParallelCalls: scaled.industry.simBusinesses.length,
+  };
 }
 
 function getBusinessNames(industry: IndustryConfig): BusinessNames {
@@ -240,22 +280,23 @@ function printResult(report: RunReport, names: BusinessNames): void {
 }
 
 async function main(): Promise<void> {
-  const { jobPath, providerName } = readArguments();
-  const job = loadJob(jobPath);
-  const industry = getIndustry(job.industryId);
+  const { jobPath, providerName, scale } = readArguments();
+  const prepared = prepareRun(loadJob(jobPath), providerName, scale);
+  const { job, industry } = prepared;
   const names = getBusinessNames(industry);
-  const provider = createProvider(providerName, config);
+  const provider = createProvider(providerName, config, prepared.fakeOptions);
 
   startRecorder(RUNS_DIRECTORY);
   startEventPrinter(names);
 
-  const report = await runJob(job, industry, provider, {
-    maxParallelCalls: config.MAX_PARALLEL_CALLS,
+  const runOptions: RunOptions = {
+    maxParallelCalls: prepared.maxParallelCalls,
     decisionWindowMs: config.DECISION_WINDOW_MS,
     runTimeoutMs: config.RUN_TIMEOUT_MS,
     settleGraceMs: config.SETTLE_GRACE_MS,
     priceFlagPct: config.PRICE_FLAG_PCT,
-  });
+  };
+  const report = await runJob(job, industry, provider, runOptions);
 
   printResult(report, names);
 }

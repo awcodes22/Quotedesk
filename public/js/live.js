@@ -2,6 +2,7 @@
 import { createInitialState, selectCalls, selectLeader } from "./state.js";
 import { followRun } from "./stream.js";
 import { createCallPanel, selectCallPanelModel } from "./render/callPanel.js";
+import { createCompletedBar, selectCompletedBarModel } from "./render/completedBar.js";
 import { createGrid, selectGridModel } from "./render/grid.js";
 import { createHeadAgent, selectHeadAgentModel } from "./render/headAgent.js";
 import { createPickerHeader, createRunHeader, selectRunHeaderModel } from "./render/header.js";
@@ -172,9 +173,15 @@ function onlyWhenChanged(select, region) {
  */
 function buildView(page, shownCall) {
   let selectedCallId = null;
+  let search = page.search;
 
   if (shownCall !== null) {
     selectedCallId = shownCall.callId;
+  }
+
+  // The search box is gone once the run finishes, so a leftover search must not dim squares.
+  if (page.state.finishedAt !== null) {
+    search = "";
   }
 
   return {
@@ -183,7 +190,7 @@ function buildView(page, shownCall) {
     listing: page.listing,
     selectedCallId,
     filter: page.filter,
-    search: page.search,
+    search,
     sort: page.sort,
     ended: page.ended,
   };
@@ -272,6 +279,12 @@ function showRun(runId, jobs) {
     onlyWhenChanged(selectStatsModel, createStats(findElement("stats"))),
   ];
   const callPanel = createCallPanel(findElement("call-panel"));
+  const statsRow = findElement("stats");
+  const completedBar = findElement("completed-bar");
+  const renderCompletedBar = onlyWhenChanged(
+    selectCompletedBarModel,
+    createCompletedBar(completedBar),
+  );
 
   function renderPage() {
     frameRequested = false;
@@ -285,6 +298,14 @@ function showRun(runId, jobs) {
 
     for (const renderRegion of regions) {
       renderRegion(view);
+    }
+
+    const finished = page.state.finishedAt !== null;
+    statsRow.hidden = finished;
+    completedBar.hidden = finished === false;
+
+    if (finished) {
+      renderCompletedBar(view);
     }
 
     if (shownCall !== null) {

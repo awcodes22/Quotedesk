@@ -76,6 +76,7 @@ const unionStationHotel: SimBusiness = {
 export const hotels: IndustryConfig = {
   id: "hotels",
   label: "Hotel rooms",
+  businessNoun: { singular: "hotel", plural: "hotels" },
   clientNoun: "a guest",
   goal: "Get the total for the stay including taxes and fees, and whether cancellation is free.",
   quoteSchema,

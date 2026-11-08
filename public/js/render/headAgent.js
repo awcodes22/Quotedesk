@@ -1,50 +1,82 @@
 // @ts-check
 import { clear, el, icon } from "../dom.js";
-import { formatClock, formatMoney, pluralize } from "../format.js";
+import { capitalize, formatClock, formatMoney, pluralize } from "../format.js";
 import {
   selectCalls,
   selectHeadAgentPlan,
+  selectOutcomeLabel,
   selectRanking,
   selectStats,
 } from "../state.js";
-import { runElapsedMs } from "./view.js";
+import { findBusinessNoun, findFieldLabels, findKeyTerm, runElapsedMs } from "./view.js";
 
 /**
  * @typedef {import("./view.js").View} View
  * @typedef {import("../state.js").CallState} CallState
+ * @typedef {import("../state.js").RankedQuote} RankedQuote
  *
  * @typedef {{ label: string, title: string, detail: string }} AgentColumn
- * @typedef {{ live: number, noAnswer: number, ended: number, queued: number }} LineCounts
+ * @typedef {{ count: number, text: string, alert: boolean }} FooterCount
  * @typedef {{
+ *   finished: boolean,
  *   title: string,
  *   clockLabel: string,
  *   clock: string,
  *   columns: AgentColumn[],
- *   counts: LineCounts,
+ *   counts: FooterCount[],
  *   progressPct: number | null,
  * }} HeadAgentModel
  */
 
 /**
  * @param {CallState[]} calls
- * @returns {LineCounts}
+ * @returns {FooterCount[]}
  */
-function countLines(calls) {
-  const counts = { live: 0, noAnswer: 0, ended: 0, queued: 0 };
+function countLiveLines(calls) {
+  let live = 0;
+  let noAnswer = 0;
+  let ended = 0;
+  let queued = 0;
 
   for (const call of calls) {
     if (call.status === "failed") {
-      counts.noAnswer += 1;
+      noAnswer += 1;
     } else if (call.status === "ended" || call.status === "skipped") {
-      counts.ended += 1;
+      ended += 1;
     } else if (call.status === "queued") {
-      counts.queued += 1;
+      queued += 1;
     } else {
-      counts.live += 1;
+      live += 1;
     }
   }
 
+  const counts = [
+    { count: live, text: "live", alert: false },
+    { count: noAnswer, text: "no answer", alert: true },
+    { count: ended, text: "ended", alert: false },
+  ];
+
+  if (queued > 0) {
+    counts.push({ count: queued, text: "queued", alert: false });
+  }
+
   return counts;
+}
+
+/**
+ * @param {View} view
+ * @returns {FooterCount[]}
+ */
+function countFinishedLines(view) {
+  const calls = selectCalls(view.state);
+  const closed = calls.filter((call) => call.command === "close" && call.commandDelivered === true);
+  const noAnswer = calls.filter((call) => call.status === "failed");
+
+  return [
+    { count: selectStats(view.state).quoteCount, text: "quotes", alert: false },
+    { count: closed.length, text: "closed politely", alert: false },
+    { count: noAnswer.length, text: "no answer", alert: true },
+  ];
 }
 
 /**
@@ -121,7 +153,7 @@ function findProgressPct(view) {
  * @param {View} view
  * @returns {HeadAgentModel}
  */
-export function selectHeadAgentModel(view) {
+function buildLiveModel(view) {
   const calls = selectCalls(view.state);
   const quoteCount = selectStats(view.state).quoteCount;
   const plan = selectHeadAgentPlan(view.state);
@@ -130,6 +162,7 @@ export function selectHeadAgentModel(view) {
   const quoteText = pluralize(quoteCount, "quote", "quotes");
 
   return {
+    finished: false,
     title: `Managing ${callText} · ${quoteText} in`,
     clockLabel: clock.clockLabel,
     clock: clock.clock,
@@ -138,9 +171,111 @@ export function selectHeadAgentModel(view) {
       { label: "Doing now", ...plan.doingNow },
       { label: "Next", ...plan.next },
     ],
-    counts: countLines(calls),
+    counts: countLiveLines(calls),
     progressPct: findProgressPct(view),
   };
+}
+
+/**
+ * @param {View} view
+ * @param {RankedQuote} winner
+ * @returns {string}
+ */
+function describeBooking(view, winner) {
+  const outcome = selectOutcomeLabel(view.state);
+  const price = formatMoney(winner.total);
+
+  if (outcome !== null && outcome.tone === "success") {
+    return `Booked ${winner.name} at ${price}`;
+  }
+
+  return `Booking not confirmed with ${winner.name} at ${price}`;
+}
+
+/**
+ * @param {View} view
+ * @returns {AgentColumn}
+ */
+function buildConfirmationColumn(view) {
+  const outcome = selectOutcomeLabel(view.state);
+  const job = view.state.job;
+  const noun = findBusinessNoun(view.listing);
+  const confirmed = outcome !== null && outcome.tone === "success";
+  let title = "Not confirmed";
+  let detail = `Check with the ${noun.singular}`;
+
+  if (confirmed) {
+    title = "Booked by phone";
+    detail = `${capitalize(noun.singular)} confirmed by phone`;
+  }
+
+  if (confirmed && job !== null && job.contact !== undefined) {
+    title = `Email to ${job.contact.email}`;
+  }
+
+  return { label: "Confirmation", title, detail };
+}
+
+/**
+ * @param {View} view
+ * @returns {HeadAgentModel}
+ */
+function buildFinishedModel(view) {
+  const ranking = selectRanking(view.state);
+  const winner = ranking[0];
+  const runnerUp = ranking[1];
+  const clock = buildClock(view);
+  const counts = countFinishedLines(view);
+
+  if (winner === undefined) {
+    return {
+      finished: true,
+      title: "No quotes came in",
+      clockLabel: clock.clockLabel,
+      clock: clock.clock,
+      columns: [],
+      counts,
+      progressPct: null,
+    };
+  }
+
+  const term = findKeyTerm(winner.fields, findFieldLabels(view));
+  let termText = "";
+  let whyDetail = "The only quote";
+
+  if (term !== null) {
+    termText = term.text;
+  }
+
+  if (runnerUp !== undefined) {
+    whyDetail = `${formatMoney(runnerUp.gapToLeader)} under ${runnerUp.name}`;
+  }
+
+  return {
+    finished: true,
+    title: describeBooking(view, winner),
+    clockLabel: clock.clockLabel,
+    clock: clock.clock,
+    columns: [
+      { label: "Winner", title: `${winner.name} ${formatMoney(winner.total)}`, detail: termText },
+      { label: "Why", title: `Lowest total of ${ranking.length}`, detail: whyDetail },
+      buildConfirmationColumn(view),
+    ],
+    counts,
+    progressPct: null,
+  };
+}
+
+/**
+ * @param {View} view
+ * @returns {HeadAgentModel}
+ */
+export function selectHeadAgentModel(view) {
+  if (view.state.finishedAt !== null) {
+    return buildFinishedModel(view);
+  }
+
+  return buildLiveModel(view);
 }
 
 /**
@@ -156,40 +291,47 @@ function renderColumn(column) {
 }
 
 /**
- * @param {number} count
- * @param {string} text
- * @param {string} className
- * @returns {HTMLElement}
- */
-function renderCount(count, text, className) {
-  return el("span", { class: className }, [
-    el("strong", { class: "tabular" }, [String(count)]),
-    ` ${text}`,
-  ]);
-}
-
-/**
- * @param {LineCounts} counts
+ * @param {FooterCount[]} counts
  * @returns {HTMLElement}
  */
 function renderCounts(counts) {
-  const group = el("div", { class: "agent-counts" }, [
-    renderCount(counts.live, "live", "agent-count"),
-    renderCount(counts.noAnswer, "no answer", "agent-count agent-count-alert"),
-    renderCount(counts.ended, "ended", "agent-count"),
-  ]);
+  const group = el("div", { class: "agent-counts" });
 
-  if (counts.queued > 0) {
-    group.appendChild(renderCount(counts.queued, "queued", "agent-count"));
+  for (const item of counts) {
+    let className = "agent-count";
+
+    if (item.alert) {
+      className = "agent-count agent-count-alert";
+    }
+
+    group.appendChild(
+      el("span", { class: className }, [
+        el("strong", { class: "tabular" }, [String(item.count)]),
+        ` ${item.text}`,
+      ]),
+    );
   }
 
   return group;
 }
 
 /**
+ * @param {boolean} finished
+ * @returns {Element}
+ */
+function renderAgentIcon(finished) {
+  if (finished) {
+    return el("span", { class: "icon-square" }, [icon("check", 18, "var(--win)")]);
+  }
+
+  return el("span", { class: "icon-square" }, [icon("network", 18)]);
+}
+
+/**
  * @param {HTMLElement} card
  */
 export function createHeadAgent(card) {
+  const iconSlot = el("span", { class: "agent-icon" });
   const title = el("span", { class: "agent-title" });
   const clockLabel = el("span", { class: "agent-clock-label" });
   const clock = el("span", { class: "agent-clock tabular" });
@@ -200,7 +342,7 @@ export function createHeadAgent(card) {
 
   card.appendChild(
     el("div", { class: "agent-top" }, [
-      el("span", { class: "icon-square" }, [icon("network", 18)]),
+      iconSlot,
       el("div", { class: "agent-heading" }, [
         el("span", { class: "agent-label" }, ["Head agent"]),
         title,
@@ -214,6 +356,8 @@ export function createHeadAgent(card) {
 
   /** @param {HeadAgentModel} model */
   function update(model) {
+    clear(iconSlot);
+    iconSlot.appendChild(renderAgentIcon(model.finished));
     title.textContent = model.title;
     clockLabel.textContent = model.clockLabel;
     clock.textContent = model.clock;

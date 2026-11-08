@@ -5,12 +5,13 @@
  */
 
 // Cheapest to priciest. Each step is a percentage above the best quote, so any industry fits.
+// Each fill has a text color dark or light enough to read on it.
 export const PRICE_SCALE = [
-  { maxPctAboveBest: 0, color: "#12B76A" },
-  { maxPctAboveBest: 3, color: "#A6F4C5" },
-  { maxPctAboveBest: 8, color: "#D1FADF" },
-  { maxPctAboveBest: 13, color: "#FEF0C7" },
-  { maxPctAboveBest: Infinity, color: "#FEDF89" },
+  { maxPctAboveBest: 0, color: "#12B76A", textColor: "#FFFFFF" },
+  { maxPctAboveBest: 3, color: "#A6F4C5", textColor: "#067647" },
+  { maxPctAboveBest: 8, color: "#D1FADF", textColor: "#067647" },
+  { maxPctAboveBest: 13, color: "#FEF0C7", textColor: "#B54708" },
+  { maxPctAboveBest: Infinity, color: "#FEDF89", textColor: "#B54708" },
 ];
 
 export const HISTOGRAM_BIN_COUNT = 10;
@@ -31,25 +32,36 @@ export function percentAboveBest(total, best) {
 /**
  * @param {number} total
  * @param {number} best
- * @returns {string}
+ * @returns {{ color: string, textColor: string }}
  */
-export function priceColor(total, best) {
+function findPriceStep(total, best) {
   const pctAboveBest = percentAboveBest(total, best);
 
   for (const step of PRICE_SCALE) {
     if (pctAboveBest <= step.maxPctAboveBest) {
-      return step.color;
+      return step;
     }
   }
 
-  const priciest = PRICE_SCALE[PRICE_SCALE.length - 1];
-  let fallback = "#FEDF89";
+  return { color: "#FEDF89", textColor: "#B54708" };
+}
 
-  if (priciest !== undefined) {
-    fallback = priciest.color;
-  }
+/**
+ * @param {number} total
+ * @param {number} best
+ * @returns {string}
+ */
+export function priceColor(total, best) {
+  return findPriceStep(total, best).color;
+}
 
-  return fallback;
+/**
+ * @param {number} total
+ * @param {number} best
+ * @returns {string}
+ */
+export function priceTextColor(total, best) {
+  return findPriceStep(total, best).textColor;
 }
 
 /**

@@ -7,7 +7,7 @@
     "name": "Jane Doe",
     "email": "jane.doe@example.com"
   },
-  "details": [{ "label": "Dates", "value": "Nov 20 to 22 · 2 nights" }],
+  "details": [{ "label": "Dates", "value": "Nov 20 to 22 · 2 nights", "icon": "calendar" }],
   "reference": {
     "total": 349,
     "source": "Listed price online"

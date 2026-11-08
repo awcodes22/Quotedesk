@@ -8,8 +8,8 @@
     "email": "jane.doe@example.com"
   },
   "details": [
-    { "label": "Dates", "value": "Nov 20 to 23 · 3 days" },
-    { "label": "Pick-up", "value": "Toronto Pearson" }
+    { "label": "Dates", "value": "Nov 20 to 23 · 3 days", "icon": "calendar" },
+    { "label": "Pick-up", "value": "Toronto Pearson", "icon": "map-pin" }
   ],
   "reference": {
     "lines": {

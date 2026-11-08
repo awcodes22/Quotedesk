@@ -28,6 +28,7 @@ const testIndustry: IndustryConfig = {
   id: "test",
   label: "Test industry",
   clientNoun: "a test client",
+  businessNoun: { singular: "test business", plural: "test businesses" },
   goal: "Get a test quote.",
   quoteSchema: z.object({
     total: z.number().positive(),

@@ -15,6 +15,7 @@ import { runJob } from "../src/core/run";
 import { hotels } from "../src/industries/hotels";
 import { loadJob } from "../src/jobs";
 import { fakeProvider } from "../src/providers/fake";
+import type { FakeProviderOptions } from "../src/providers/fake";
 import { createProvider } from "../src/providers/index";
 import type { CallProvider } from "../src/providers/types";
 
@@ -33,9 +34,12 @@ const noOpenAIConfig = {
   DECISION_WINDOW_MS: 2_000,
 };
 
-function createTestProvider(name: string): CallProvider {
+function createTestProvider(
+  name: string,
+  fakeOptions: FakeProviderOptions = {},
+): CallProvider {
   if (name === "fake") {
-    return fakeProvider({ stepMs: 1 });
+    return fakeProvider({ ...fakeOptions, stepMs: 1 });
   }
 
   return createProvider(name, noOpenAIConfig);
@@ -152,8 +156,8 @@ describe("GET /api/jobs", () => {
       industry: { id: "car-rentals", label: "Car rentals" },
       reference: { total: 246, source: "Last trip's receipt" },
       details: [
-        { label: "Dates", value: "Nov 20 to 23 · 3 days" },
-        { label: "Pick-up", value: "Toronto Pearson" },
+        { label: "Dates", value: "Nov 20 to 23 · 3 days", icon: "calendar" },
+        { label: "Pick-up", value: "Toronto Pearson", icon: "map-pin" },
       ],
       decideWithinMs: 5_000,
       maxTurns: 14,
@@ -233,6 +237,47 @@ describe("POST /api/runs", () => {
 
     expect(second.status).toBe(409);
     await readEventStream(app, runId);
+  });
+});
+
+describe("POST /api/runs with scale", () => {
+  it("dials every scaled call at once", async () => {
+    const { app } = buildTestApp(createTempDirectory());
+    const response = await request(app)
+      .post("/api/runs")
+      .send({ jobId: "toronto-weekend", provider: "fake", scale: 24 });
+
+    expect(response.status).toBe(201);
+
+    const stream = await readEventStream(app, String(response.body.runId));
+    const firstQuote = stream.events.findIndex((event) => event.type === "quote");
+    const dialedBeforeFirstQuote = stream.events
+      .slice(0, firstQuote)
+      .filter((event) => event.type === "call_status" && event.status === "connecting");
+
+    expect(stream.events[0]).toMatchObject({ type: "run_started" });
+    expect(dialedBeforeFirstQuote).toHaveLength(24);
+  });
+
+  it("refuses scale for the text provider", async () => {
+    const { app } = buildTestApp(createTempDirectory());
+
+    const response = await request(app)
+      .post("/api/runs")
+      .send({ jobId: "toronto-weekend", provider: "text", scale: 24 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("fake provider");
+  });
+
+  it("refuses a scale above the maximum", async () => {
+    const { app } = buildTestApp(createTempDirectory());
+
+    const response = await request(app)
+      .post("/api/runs")
+      .send({ jobId: "toronto-weekend", provider: "fake", scale: 500 });
+
+    expect(response.status).toBe(400);
   });
 });
 
@@ -331,6 +376,7 @@ describe("GET /api/runs/:id/summary", () => {
         firstTotal: 455,
         outcome: "committed",
       },
+      bookingConfirmed: true,
       counts: { calls: 3, quoted: 3, failed: 0, neverQuoted: 0 },
       stats: {
         best: 398,
@@ -408,6 +454,7 @@ describe("summarizeRun", () => {
     );
 
     expect(summary).toMatchObject({
+      bookingConfirmed: true,
       counts: { calls: 2, quoted: 1, failed: 1, neverQuoted: 0 },
       stats: { best: 412, median: 412, savedVsMedian: 0 },
     });
