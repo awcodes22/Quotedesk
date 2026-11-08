@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QuoteDesk</title>
+    <link rel="stylesheet" href="/css/tokens.css" />
+    <link rel="stylesheet" href="/css/app.css" />
+    <script type="module" src="/js/live.js"></script>
+  </head>
+  <body>
+    <header id="topbar" class="topbar">
+      <div class="wordmark">QuoteDesk</div>
+    </header>
+    <main class="screen">
+      <section class="workspace">
+        <p id="empty-state" class="empty-state" hidden>
+          Pick a job and press Start calls to watch the head agent work.
+        </p>
+        <div id="hero" class="card hero" hidden>
+          <div id="tracker" class="hero-top"></div>
+          <div id="head-agent" class="card agent-card"></div>
+          <div id="top-cards" class="top-area"></div>
+          <div id="grid" class="card grid-card"></div>
+          <div id="stats" class="stats-row"></div>
+        </div>
+      </section>
+      <aside id="call-panel" class="panel" aria-label="Selected call" hidden></aside>
+    </main>
+  </body>
+</html>

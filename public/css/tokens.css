@@ -43,6 +43,10 @@
   --dialing-border: 1.5px dashed #a4bcfd;
   --dialing-icon: #2563eb;
 
+  --queued-bg: #ffffff;
+  --queued-border: 1px dashed #d0d5dd;
+  --queued-icon: #a8a29e;
+
   --menu-bg: #f4f3ff;
   --menu-border: 1px solid #d9d6fe;
   --menu-icon: #6938ef;

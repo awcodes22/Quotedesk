@@ -25,6 +25,7 @@ export type AppOptions = {
   runsDirectory: string;
   publicDirectory: string;
   runOptions: RunOptions;
+  maxTurns: number;
   createProvider: (name: string) => CallProvider;
   registry: RunRegistry;
 };
@@ -37,7 +38,12 @@ const startRunSchema = z.strictObject({
 // Run ids become file names, so anything that could leave the runs folder is refused.
 const runIdSchema = z.string().regex(/^run-[A-Za-z0-9-]+$/);
 
-function buildJobListing(job: Job, decideWithinMs: number) {
+type ListingLimits = {
+  decideWithinMs: number;
+  maxTurns: number;
+};
+
+function buildJobListing(job: Job, limits: ListingLimits) {
   const industry = getIndustry(job.industryId);
   let businessCount = industry.simBusinesses.length;
 
@@ -63,7 +69,8 @@ function buildJobListing(job: Job, decideWithinMs: number) {
     },
     reference: job.reference,
     details: job.details,
-    decideWithinMs,
+    decideWithinMs: limits.decideWithinMs,
+    maxTurns: limits.maxTurns,
     contactName,
     businessCount,
   };
@@ -103,8 +110,11 @@ function buildApiRouter(options: AppOptions): Router {
   function handleListJobs(_request: Request, response: Response): void {
     const jobs = listJobs(options.jobsDirectory);
     // The head agent decides by the run timeout at the latest, so that is the promise shown.
-    const decideWithinMs = options.runOptions.runTimeoutMs;
-    const listings = jobs.map((job) => buildJobListing(job, decideWithinMs));
+    const limits = {
+      decideWithinMs: options.runOptions.runTimeoutMs,
+      maxTurns: options.maxTurns,
+    };
+    const listings = jobs.map((job) => buildJobListing(job, limits));
     response.json({ jobs: listings });
   }
 

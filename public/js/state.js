@@ -53,6 +53,7 @@
  *   decidedAt: number | null,
  *   priceCheck: PriceCheck | null,
  *   winnerGone: boolean,
+ *   lastEventAt: number | null,
  * }} RunState
  *
  * @typedef {"calling" | "quotes" | "deciding" | "booking" | "done"} RunStatus
@@ -123,6 +124,7 @@ export function createInitialState() {
     decidedAt: null,
     priceCheck: null,
     winnerGone: false,
+    lastEventAt: null,
   };
 }
 
@@ -385,7 +387,10 @@ export function runReducer(state, event) {
     return state;
   }
 
-  return applyRunEvent(state, event);
+  const nextState = applyRunEvent(state, event);
+
+  // The page compares this with its own clock, so timers stay right even if the clocks differ.
+  return { ...nextState, lastEventAt: event.at };
 }
 
 /**
@@ -778,13 +783,21 @@ function describeDeadline(deadline) {
  * @returns {HeadAgentPlan}
  */
 function planWhileCalling(state) {
-  const dialing = selectGridCounts(state).dialing;
+  const counts = selectGridCounts(state);
+  let doingNow = {
+    title: "Asking for prices",
+    detail: `${pluralize(counts.talking, "call", "calls")} talking`,
+  };
+
+  if (counts.dialing > 0) {
+    doingNow = {
+      title: "Dialing businesses",
+      detail: `${pluralize(counts.dialing, "call", "calls")} connecting`,
+    };
+  }
 
   return {
-    doingNow: {
-      title: "Dialing businesses",
-      detail: `${pluralize(dialing, "call", "calls")} connecting`,
-    },
+    doingNow,
     next: {
       title: "Wait for the first quote",
       detail: "It starts the decision window",

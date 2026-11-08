@@ -280,11 +280,21 @@ describe("runReducer on a recorded fake run", () => {
 });
 
 describe("run status along the way", () => {
-  it("is calling before the first quote", () => {
-    const state = reduceAll(eventsBefore("quote"));
+  it("is dialing before anyone answers", () => {
+    const state = reduceAll(eventsBefore("transcript"));
 
     expect(selectRunStatus(state)).toBe("calling");
     expect(selectHeadAgentPlan(state).doingNow.title).toBe("Dialing businesses");
+  });
+
+  it("is asking for prices once every line is talking", () => {
+    const state = reduceAll(eventsBefore("quote"));
+
+    expect(selectRunStatus(state)).toBe("calling");
+    expect(selectHeadAgentPlan(state).doingNow).toEqual({
+      title: "Asking for prices",
+      detail: "3 calls talking",
+    });
   });
 
   it("is collecting quotes once one arrives", () => {

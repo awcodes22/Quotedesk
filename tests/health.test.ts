@@ -17,6 +17,7 @@ describe("GET /health", () => {
         settleGraceMs: 50,
         priceFlagPct: 10,
       },
+      maxTurns: 14,
       createProvider: () => fakeProvider({ stepMs: 1 }),
       registry: new RunRegistry(),
     });

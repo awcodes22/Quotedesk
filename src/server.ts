@@ -21,6 +21,7 @@ const app = createApp({
     settleGraceMs: config.SETTLE_GRACE_MS,
     priceFlagPct: config.PRICE_FLAG_PCT,
   },
+  maxTurns: config.MAX_TURNS,
   createProvider: (name) => createProvider(name, config),
   registry,
 });

@@ -62,6 +62,7 @@ function buildTestApp(runsDirectory: string) {
       settleGraceMs: 50,
       priceFlagPct: 10,
     },
+    maxTurns: 14,
     createProvider: createTestProvider,
     registry,
   });
@@ -155,6 +156,7 @@ describe("GET /api/jobs", () => {
         { label: "Pick-up", value: "Toronto Pearson" },
       ],
       decideWithinMs: 5_000,
+      maxTurns: 14,
       contactName: "Jane Doe",
       businessCount: 3,
     });
