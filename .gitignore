@@ -4,3 +4,4 @@ runs/
 dist/
 .DS_Store
 docs/
+data/jobs/hotels-live.json

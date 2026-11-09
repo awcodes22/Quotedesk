@@ -39,6 +39,18 @@ export type JobDetail = {
   icon?: string;
 };
 
+// Dates are ISO days, such as 2026-11-20, and get turned into speech before a live call.
+export type Stay = {
+  checkIn: string;
+  checkOut: string;
+  beds: string;
+};
+
+export type LiveBusiness = {
+  name: string;
+  phone: string;
+};
+
 export type Job = {
   id: string;
   industryId: string;
@@ -48,6 +60,8 @@ export type Job = {
   reference?: ReferencePrices;
   contact?: Contact;
   details?: JobDetail[];
+  stay?: Stay;
+  liveBusinesses?: LiveBusiness[];
 };
 
 export type PriceCheckRow = {
@@ -115,6 +129,7 @@ export type SimBusiness = {
   name: string;
   instructions: string;
   fakeQuotes: QuoteFields[];
+  phone?: string;
 };
 
 export type FieldLabel = {

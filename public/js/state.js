@@ -539,6 +539,15 @@ export function selectRunStatus(state) {
 }
 
 /**
+ * Live runs place real phone calls that only gather quotes and never book.
+ * @param {string} provider
+ * @returns {boolean}
+ */
+export function isLiveProvider(provider) {
+  return provider === "live";
+}
+
+/**
  * @param {RunState} state
  * @returns {string | null}
  */
@@ -709,6 +718,11 @@ export function selectOutcomeLabel(state) {
     return null;
   }
 
+  // Live calls never book, so the head agent's pick is a recommendation.
+  if (isLiveProvider(state.provider)) {
+    return { text: "Best quote", tone: "success" };
+  }
+
   const winner = state.calls[winnerCallId];
   /** @type {OutcomeLabel} */
   const notConfirmed = { text: "Booking not confirmed", tone: "warning" };
@@ -836,6 +850,11 @@ function planWhileDeciding(state) {
   if (leader !== null) {
     nextTitle = `Book ${leader.name}`;
     nextDetail = "Close every other call";
+  }
+
+  if (leader !== null && isLiveProvider(state.provider)) {
+    nextTitle = `Recommend ${leader.name}`;
+    nextDetail = "Live calls never book";
   }
 
   return {

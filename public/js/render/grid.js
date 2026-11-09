@@ -1,6 +1,8 @@
 // @ts-check
 import { clear, el, icon } from "../dom.js";
+import { formatClock } from "../format.js";
 import { priceColor } from "../price.js";
+import { callElapsedMs, isLiveRun } from "./view.js";
 import {
   GRID_STATES,
   selectCalls,
@@ -26,11 +28,12 @@ import {
  *   kind: SquareKind,
  *   price: string | null,
  *   priceCameDown: boolean,
+ *   timer: string | null,
  *   color: string | null,
  *   selected: boolean,
  *   dim: boolean,
  * }} SquareModel
- * @typedef {{ chips: ChipModel[], squares: SquareModel[], finished: boolean }} GridModel
+ * @typedef {{ chips: ChipModel[], squares: SquareModel[], finished: boolean, winnerLabel: string }} GridModel
  *
  * @typedef {{
  *   onSelect: (callId: string) => void,
@@ -63,6 +66,29 @@ const SQUARE_ICONS = {
   "never-quoted": "phone-off",
 };
 
+// Live calls are real phone calls that never book and hang up on their own.
+/** @type {Partial<Record<GridState, string>>} */
+const LIVE_CHIP_LABELS = {
+  winner: "Best quote",
+  talking: "On call",
+  closed: "Quoted",
+};
+
+/**
+ * @param {View} view
+ * @param {GridState} gridState
+ * @returns {string}
+ */
+function chipLabel(view, gridState) {
+  const liveLabel = LIVE_CHIP_LABELS[gridState];
+
+  if (isLiveRun(view) && liveLabel !== undefined) {
+    return liveLabel;
+  }
+
+  return CHIP_LABELS[gridState];
+}
+
 /**
  * @param {View} view
  * @returns {ChipModel[]}
@@ -80,7 +106,7 @@ function buildChips(view) {
     if (count > 0) {
       chips.push({
         key: gridState,
-        label: CHIP_LABELS[gridState],
+        label: chipLabel(view, gridState),
         count,
         active: view.filter === gridState,
       });
@@ -101,6 +127,23 @@ function isDimmed(view, call, gridState) {
   const matchesSearch = search === "" || call.name.toLowerCase().includes(search);
   const matchesFilter = view.filter === "all" || view.filter === gridState;
   return matchesSearch === false || matchesFilter === false;
+}
+
+/**
+ * A live call can run for minutes before its quote lands, so its square shows how long it has been on.
+ * @param {View} view
+ * @param {CallState} call
+ * @param {GridState} gridState
+ * @returns {string | null}
+ */
+function findSquareTimer(view, call, gridState) {
+  const onTheLine = gridState === "talking" || gridState === "dialing";
+
+  if (isLiveRun(view) === false || onTheLine === false) {
+    return null;
+  }
+
+  return formatClock(callElapsedMs(call, view.now));
 }
 
 /**
@@ -137,6 +180,7 @@ function buildSquare(view, call, topCallIds, best) {
     kind,
     price,
     priceCameDown,
+    timer: findSquareTimer(view, call, gridState),
     color,
     selected: view.selectedCallId === call.callId,
     dim: isDimmed(view, call, gridState),
@@ -184,7 +228,13 @@ export function selectGridModel(view) {
   }
 
   const squares = calls.map((call) => buildSquare(view, call, topCallIds, best));
-  return { chips: buildChips(view), squares, finished: view.state.finishedAt !== null };
+
+  return {
+    chips: buildChips(view),
+    squares,
+    finished: view.state.finishedAt !== null,
+    winnerLabel: chipLabel(view, "winner"),
+  };
 }
 
 /**
@@ -287,6 +337,10 @@ function paintSquare(button, square) {
   if (square.price !== null) {
     button.appendChild(el("span", { class: "tabular" }, [square.price]));
   }
+
+  if (square.timer !== null) {
+    button.appendChild(el("span", { class: "tabular" }, [square.timer]));
+  }
 }
 
 /** @returns {HTMLElement} */
@@ -302,11 +356,14 @@ function renderLegend() {
   ]);
 }
 
-/** @returns {HTMLElement} */
-function renderFinishedBar() {
+/**
+ * @param {HTMLElement} winnerLabel
+ * @returns {HTMLElement}
+ */
+function renderFinishedBar(winnerLabel) {
   return el("div", { class: "grid-bar" }, [
     el("div", { class: "grid-legend" }, [
-      el("span", { class: "legend-item" }, [el("span", { class: "swatch swatch-winner" }), "Booked"]),
+      el("span", { class: "legend-item" }, [el("span", { class: "swatch swatch-winner" }), winnerLabel]),
       el("span", { class: "legend-item" }, [
         "Cheaper",
         el("span", { class: "price-bar" }),
@@ -362,7 +419,8 @@ export function createGrid(card, actions) {
   let lastChips = "";
 
   const liveBar = el("div", { class: "grid-bar" }, [renderLegend(), renderTools(actions)]);
-  const finishedBar = renderFinishedBar();
+  const winnerLabel = el("span", {}, [CHIP_LABELS.winner]);
+  const finishedBar = renderFinishedBar(winnerLabel);
 
   finishedBar.hidden = true;
   card.appendChild(chips);
@@ -436,6 +494,7 @@ export function createGrid(card, actions) {
   function update(model) {
     liveBar.hidden = model.finished;
     finishedBar.hidden = model.finished === false;
+    winnerLabel.textContent = model.winnerLabel;
     updateChips(model.chips);
     updateSquares(model.squares);
   }

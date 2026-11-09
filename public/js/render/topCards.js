@@ -7,6 +7,7 @@ import {
   describeCallStatus,
   findFieldLabels,
   findKeyTerm,
+  isLiveRun,
 } from "./view.js";
 
 /**
@@ -66,6 +67,11 @@ function findCardStatus(view, quote) {
     return { text, tone };
   }
 
+  // Live calls hang up on their own, so nobody was closed by the head agent.
+  if (state.decision !== null && isLiveRun(view)) {
+    return { text: "Quoted", tone: "muted" };
+  }
+
   if (state.decision !== null) {
     return { text: "Closed politely", tone: "muted" };
   }
@@ -78,7 +84,7 @@ function findCardStatus(view, quote) {
     return { text: "", tone: "plain" };
   }
 
-  const statusText = describeCallStatus(call.status).text;
+  const statusText = describeCallStatus(call.status, isLiveRun(view)).text;
   const timer = formatClock(callElapsedMs(call, view.now));
   return { text: `${statusText} ${timer}`, tone: "plain" };
 }

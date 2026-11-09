@@ -103,6 +103,11 @@ function buildBookedTile(summary) {
     return { swatch: "#12B76A", label: "Booked at", value: formatMoney(winner.total), tone: "win", detail: winner.businessName };
   }
 
+  // Live calls never book, so the pick is shown as a recommendation.
+  if (summary.provider === "live") {
+    return { swatch: "#12B76A", label: "Best quote", value: formatMoney(winner.total), tone: "win", detail: winner.businessName };
+  }
+
   return {
     swatch: "#FEC84B",
     label: "Booking not confirmed",
@@ -238,10 +243,20 @@ function describeTerms(quote, fieldLabels) {
 
 /**
  * @param {SummaryQuote} quote
- * @param {boolean | null} bookingConfirmed
+ * @param {RunSummary} summary
  * @returns {HTMLElement}
  */
-function renderOutcome(quote, bookingConfirmed) {
+function renderOutcome(quote, summary) {
+  const bookingConfirmed = summary.bookingConfirmed;
+
+  if (summary.provider === "live" && quote.rank === 1) {
+    return el("span", { class: "outcome tone-win" }, [el("span", { class: "swatch swatch-winner" }), "Best quote"]);
+  }
+
+  if (summary.provider === "live") {
+    return el("span", { class: "outcome tone-plain" }, [el("span", { class: "swatch swatch-refused" }), "Quoted"]);
+  }
+
   if (quote.outcome === "committed" && bookingConfirmed === true) {
     return el("span", { class: "outcome tone-win" }, [el("span", { class: "swatch swatch-winner" }), "Booked"]);
   }
@@ -301,7 +316,7 @@ function renderQuoteRow(data, quote, best) {
     el("td", {}, [renderPriceChip(quote.total, best)]),
     gap,
     el("td", { class: termsClass }, [terms.text]),
-    el("td", {}, [renderOutcome(quote, data.summary.bookingConfirmed)]),
+    el("td", {}, [renderOutcome(quote, data.summary)]),
   ]);
 }
 

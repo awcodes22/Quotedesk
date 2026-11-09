@@ -1,0 +1,23 @@
+{
+  "id": "toronto-weekend-live",
+  "industryId": "hotels",
+  "title": "2 nights in Toronto (live calls)",
+  "request": "a room for 2 guests for 2 nights",
+  "stay": {
+    "checkIn": "2026-11-20",
+    "checkOut": "2026-11-22",
+    "beds": "one king bed"
+  },
+  "details": [
+    { "label": "Dates", "value": "Nov 20 to 22 · 2 nights", "icon": "calendar" },
+    { "label": "Beds", "value": "1 king bed", "icon": "user" }
+  ],
+  "reference": {
+    "total": 349,
+    "source": "Listed price online"
+  },
+  "liveBusinesses": [
+    { "name": "First Hotel", "phone": "+15555550101" },
+    { "name": "Second Hotel", "phone": "+15555550102" }
+  ]
+}

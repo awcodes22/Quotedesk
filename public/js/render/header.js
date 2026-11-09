@@ -12,7 +12,8 @@ import { findBusinessNoun, runElapsedMs } from "./view.js";
  *
  * @typedef {{ icon: IconName | null, label: string, value: string }} RequestField
  * @typedef {{ fields: RequestField[], finished: boolean, elapsed: string }} RunHeaderModel
- * @typedef {{ jobId: string, provider: "fake" | "text", scale?: number }} StartRequest
+ * @typedef {"fake" | "text" | "live"} ProviderName
+ * @typedef {{ jobId: string, provider: ProviderName, scale?: number }} StartRequest
  * @typedef {{ fields: HTMLElement, right: HTMLElement }} HeaderFrame
  */
 
@@ -193,12 +194,20 @@ function renderJobSelect(jobs) {
   return select;
 }
 
+/** @type {{ value: ProviderName, label: string }[]} */
+export const PROVIDER_OPTIONS = [
+  { value: "fake", label: "Demo" },
+  { value: "text", label: "Chats" },
+  { value: "live", label: "Live call" },
+];
+
 /** @returns {HTMLSelectElement} */
 function renderProviderSelect() {
-  return el("select", { class: "picker-select", "aria-label": "Provider" }, [
-    el("option", { value: "fake" }, ["Fake calls"]),
-    el("option", { value: "text" }, ["AI text calls"]),
-  ]);
+  const options = PROVIDER_OPTIONS.map((option) => {
+    return el("option", { value: option.value }, [option.label]);
+  });
+
+  return el("select", { class: "picker-select", "aria-label": "Mode" }, options);
 }
 
 /** @returns {HTMLInputElement} */
@@ -216,19 +225,21 @@ function renderScaleInput() {
 
 /**
  * @param {string} value
- * @returns {"fake" | "text"}
+ * @returns {ProviderName}
  */
 function readProvider(value) {
-  if (value === "text") {
-    return "text";
+  const option = PROVIDER_OPTIONS.find((candidate) => candidate.value === value);
+
+  if (option === undefined) {
+    return "fake";
   }
 
-  return "fake";
+  return option.value;
 }
 
 /**
  * An empty box means a normal run with the job's own businesses.
- * @param {"fake" | "text"} provider
+ * @param {ProviderName} provider
  * @param {HTMLInputElement} scaleInput
  * @returns {StartRequest["scale"]}
  */

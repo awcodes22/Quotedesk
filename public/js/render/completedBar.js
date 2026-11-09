@@ -1,7 +1,7 @@
 // @ts-check
 import { clear, el, icon } from "../dom.js";
 import { formatClock, formatMoney, formatSignedPercent } from "../format.js";
-import { selectOutcomeLabel, selectRanking, selectStats } from "../state.js";
+import { isLiveProvider, selectOutcomeLabel, selectRanking, selectStats } from "../state.js";
 import { findBusinessNoun, findFieldLabels, findKeyTerm, runElapsedMs } from "./view.js";
 
 /**
@@ -46,6 +46,27 @@ function describeConfirmedBooking(view, winner) {
 }
 
 /**
+ * Live calls never book, so the sentence recommends instead of confirming.
+ * @param {View} view
+ * @param {RankedQuote} winner
+ * @returns {SentencePart[]}
+ */
+function describeBestQuote(view, winner) {
+  const term = findKeyTerm(winner.fields, findFieldLabels(view));
+  let termText = "";
+
+  if (term !== null) {
+    termText = `, ${term.text.toLowerCase()}`;
+  }
+
+  return [
+    { text: `Best quote: ${winner.name} at `, bold: false },
+    { text: formatMoney(winner.total), bold: true },
+    { text: `${termText}. Nothing was booked.`, bold: false },
+  ];
+}
+
+/**
  * @param {View} view
  * @returns {SentencePart[]}
  */
@@ -56,6 +77,10 @@ function buildSentence(view) {
 
   if (winner === undefined) {
     return [{ text: "No quotes came in, so nothing was booked.", bold: false }];
+  }
+
+  if (isLiveProvider(view.state.provider)) {
+    return describeBestQuote(view, winner);
   }
 
   if (outcome !== null && outcome.tone === "success") {

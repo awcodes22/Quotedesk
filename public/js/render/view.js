@@ -1,5 +1,6 @@
 // @ts-check
 import { capitalize } from "../format.js";
+import { isLiveProvider } from "../state.js";
 
 /**
  * @typedef {import("../state.js").RunState} RunState
@@ -63,10 +64,16 @@ const CALL_STATUS_TEXT = {
 };
 
 /**
+ * A live call is a real phone call, so talking reads as being on the call.
  * @param {CallStatus} status
+ * @param {boolean} [live]
  * @returns {StatusText}
  */
-export function describeCallStatus(status) {
+export function describeCallStatus(status, live = false) {
+  if (live && status === "talking") {
+    return { text: "On call", tone: "live" };
+  }
+
   return CALL_STATUS_TEXT[status];
 }
 
@@ -140,6 +147,14 @@ export function findBusinessNoun(listing) {
  */
 export function isTextRun(view) {
   return view.state.provider === "text";
+}
+
+/**
+ * @param {View} view
+ * @returns {boolean}
+ */
+export function isLiveRun(view) {
+  return isLiveProvider(view.state.provider);
 }
 
 /**

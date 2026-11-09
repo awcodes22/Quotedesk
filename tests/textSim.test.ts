@@ -209,6 +209,7 @@ function getBusiness(id: string): SimBusiness {
 
 function buildCallContext(): CallContext {
   return {
+    runId: "run-test",
     callId: "call-1",
     job: oneHotelJob,
     industry: hotels,

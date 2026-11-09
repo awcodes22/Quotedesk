@@ -2,10 +2,12 @@ import { onEvent } from "../core/events";
 import type { AgentEvent } from "../core/events";
 import { isRunning, runJob } from "../core/run";
 import type { RunOptions } from "../core/run";
-import type { IndustryConfig, Job } from "../core/types";
+import type { IndustryConfig, Job, LiveBusiness } from "../core/types";
 import { getIndustry } from "../industries/index";
 import { listJobs } from "../jobs";
 import type { FakeProviderOptions } from "../providers/fake";
+import { checkLiveBusinesses, liveRunTimeoutMs, toSimBusinesses } from "../providers/live";
+import type { LiveLimits } from "../providers/live";
 import type { CallProvider } from "../providers/types";
 import { scaleRun } from "../scale";
 
@@ -19,6 +21,7 @@ export type StartRunSettings = {
   jobsDirectory: string;
   runOptions: RunOptions;
   createProvider: (name: string, fakeOptions?: FakeProviderOptions) => CallProvider;
+  liveLimits?: LiveLimits;
 };
 
 type PreparedRun = {
@@ -121,6 +124,63 @@ function prepareRun(
   }
 }
 
+// Live calls quote only after they hang up, so the head agent waits for every call
+// instead of deciding a window after the first quote.
+function prepareLiveRun(job: Job, settings: StartRunSettings): PreparedRun | string {
+  const limits = settings.liveLimits;
+  let businesses: LiveBusiness[] = [];
+
+  if (limits === undefined) {
+    return "Live calls are unavailable on this server.";
+  }
+
+  if (job.liveBusinesses !== undefined) {
+    businesses = job.liveBusinesses;
+  }
+
+  const problem = checkLiveBusinesses(businesses, limits);
+
+  if (problem !== undefined) {
+    return problem;
+  }
+
+  if (job.stay === undefined) {
+    return "A live job needs a stay with checkIn, checkOut and beds.";
+  }
+
+  const industry = getIndustry(job.industryId);
+  const timeoutMs = liveRunTimeoutMs(limits.callTimeoutMs, businesses.length);
+
+  return {
+    // The numbers stay out of the job, which is logged and sent to the dashboard.
+    job: { ...job, businessIds: undefined, liveBusinesses: undefined },
+    industry: { ...industry, simBusinesses: toSimBusinesses(businesses) },
+    runOptions: {
+      ...settings.runOptions,
+      maxParallelCalls: businesses.length,
+      decisionWindowMs: timeoutMs,
+      runTimeoutMs: timeoutMs,
+    },
+    fakeOptions: {},
+  };
+}
+
+function prepareAnyRun(
+  request: StartRunRequest,
+  job: Job,
+  settings: StartRunSettings,
+): PreparedRun | string {
+  if (request.provider !== "live") {
+    return prepareRun(request, job, settings);
+  }
+
+  if (request.scale !== undefined) {
+    return "Scale only works with the fake provider.";
+  }
+
+  return prepareLiveRun(job, settings);
+}
+
 export async function startRun(
   request: StartRunRequest,
   settings: StartRunSettings,
@@ -135,7 +195,16 @@ export async function startRun(
     return { ok: false, status: 404, error: `Unknown job "${request.jobId}".` };
   }
 
-  const prepared = prepareRun(request, job, settings);
+  // A missing key is the first thing to fix, so it is reported before any job problem.
+  if (request.provider === "live") {
+    const liveCheck = createProviderSafely(settings, "live", {});
+
+    if (typeof liveCheck === "string") {
+      return { ok: false, status: 400, error: liveCheck };
+    }
+  }
+
+  const prepared = prepareAnyRun(request, job, settings);
 
   if (typeof prepared === "string") {
     return { ok: false, status: 400, error: prepared };

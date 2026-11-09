@@ -74,6 +74,11 @@ function readArguments(): CliArguments {
 function prepareRun(job: Job, providerName: string, scale: number | undefined): PreparedRun {
   const industry = getIndustry(job.industryId);
 
+  // Live runs need the allowlist and recording checks that only the server applies.
+  if (providerName === "live") {
+    throw new Error("Live calls run from the dashboard, not the CLI.");
+  }
+
   if (scale === undefined) {
     return { job, industry, fakeOptions: {}, maxParallelCalls: config.MAX_PARALLEL_CALLS };
   }

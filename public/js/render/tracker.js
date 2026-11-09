@@ -1,6 +1,6 @@
 // @ts-check
 import { clear, el, icon } from "../dom.js";
-import { selectRunStatus, selectStats } from "../state.js";
+import { isLiveProvider, selectRunStatus, selectStats } from "../state.js";
 
 /**
  * @typedef {import("./view.js").View} View
@@ -54,12 +54,18 @@ export function selectTrackerModel(view) {
 
   const steps = STEPS.map((step, index) => {
     let count = null;
+    let text = step.text;
 
     if (step.status === "quotes") {
       count = `${quoteCount}/${callCount}`;
     }
 
-    return { text: step.text, count, phase: findPhase(index, currentIndex, finished) };
+    // Live calls never book, so that step names the pick instead.
+    if (step.status === "booking" && isLiveProvider(view.state.provider)) {
+      text = "Best quote";
+    }
+
+    return { text, count, phase: findPhase(index, currentIndex, finished) };
   });
 
   let label = "LIVE CALLS";

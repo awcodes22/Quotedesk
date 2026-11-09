@@ -38,6 +38,26 @@ function optionalText() {
   return z.string().optional().transform(blankToUndefined);
 }
 
+const PHONE_NUMBER_PATTERN = /^\+[1-9][0-9]{6,14}$/;
+
+function splitNumberList(value: string | undefined): string[] {
+  const text = blankToUndefined(value);
+
+  if (text === undefined) {
+    return [];
+  }
+
+  const entries = text.split(",").map((entry) => entry.trim());
+  return entries.filter((entry) => entry !== "");
+}
+
+// The message never repeats the entry, since these are real phone numbers.
+function phoneNumberList() {
+  const error = "must be comma-separated numbers in E.164 format, such as +15551234567";
+  const numbers = z.array(z.string().regex(PHONE_NUMBER_PATTERN, { error }));
+  return z.string().optional().transform(splitNumberList).pipe(numbers);
+}
+
 type OpenAIValues = {
   PROVIDER: string;
   OPENAI_API_KEY: string | undefined;
@@ -65,16 +85,25 @@ function requireOpenAIValues(
 
 const configSchema = z
   .object({
+    HOST: z.string().trim().min(1).default("127.0.0.1"),
     PORT: wholeNumber().min(1).max(65535).default(3001),
     MAX_PARALLEL_CALLS: wholeNumber().min(1).max(30).default(3),
     DECISION_WINDOW_MS: wholeNumber().min(1).default(20000),
-    SETTLE_GRACE_MS: wholeNumber().min(0).default(8000),
+    SETTLE_GRACE_MS: wholeNumber().min(0).default(3000),
     RUN_TIMEOUT_MS: wholeNumber().min(1).default(120000),
     PRICE_FLAG_PCT: positiveNumber().default(10),
     PROVIDER: z.enum(["fake", "text"]).default("fake"),
     OPENAI_API_KEY: optionalText(),
     OPENAI_MODEL: optionalText(),
     MAX_TURNS: wholeNumber().min(1).default(14),
+    ELEVENLABS_API_KEY: optionalText(),
+    ELEVENLABS_AGENT_ID: optionalText(),
+    ELEVENLABS_PHONE_NUMBER_ID: optionalText(),
+    LIVE_GUEST_NAME: optionalText(),
+    LIVE_ALLOWED_NUMBERS: phoneNumberList(),
+    // The ElevenLabs plan allows six calls at once, so the cap can't go higher.
+    LIVE_MAX_CALLS: wholeNumber().min(1).max(6).default(6),
+    LIVE_CALL_TIMEOUT_MS: wholeNumber().min(1).default(300000),
   })
   .superRefine(requireOpenAIValues);
 

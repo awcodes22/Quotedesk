@@ -22,8 +22,13 @@ const app = createApp({
     priceFlagPct: config.PRICE_FLAG_PCT,
   },
   maxTurns: config.MAX_TURNS,
-  createProvider: (name, fakeOptions) => createProvider(name, config, fakeOptions),
+  createProvider: (name, fakeOptions) => createProvider(name, config, fakeOptions, RUNS_DIRECTORY),
   registry,
+  liveLimits: {
+    allowedNumbers: config.LIVE_ALLOWED_NUMBERS,
+    maxCalls: config.LIVE_MAX_CALLS,
+    callTimeoutMs: config.LIVE_CALL_TIMEOUT_MS,
+  },
 });
 
 // Express 5 also calls this when listening fails, such as when the port is in use.
@@ -32,7 +37,8 @@ function handleListenResult(error?: Error): void {
     throw error;
   }
 
-  console.log(`QuoteDesk listening on http://localhost:${config.PORT}`);
+  console.log(`QuoteDesk listening on http://${config.HOST}:${config.PORT}`);
 }
 
-app.listen(config.PORT, handleListenResult);
+// Loopback by default, since the API has no login and live calls cost real money.
+app.listen(config.PORT, config.HOST, handleListenResult);

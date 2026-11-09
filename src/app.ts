@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import express from "express";
 import type {
@@ -14,6 +15,8 @@ import type { Job } from "./core/types";
 import { getIndustry } from "./industries/index";
 import { listJobs } from "./jobs";
 import type { FakeProviderOptions } from "./providers/fake";
+import { audioPath } from "./providers/live";
+import type { LiveLimits } from "./providers/live";
 import type { CallProvider } from "./providers/types";
 import { MAX_SCALE } from "./scale";
 import { streamLiveEvents, streamRecordedEvents } from "./api/eventStream";
@@ -30,16 +33,18 @@ export type AppOptions = {
   maxTurns: number;
   createProvider: (name: string, fakeOptions?: FakeProviderOptions) => CallProvider;
   registry: RunRegistry;
+  liveLimits?: LiveLimits;
 };
 
 const startRunSchema = z.strictObject({
   jobId: z.string().min(1),
-  provider: z.enum(["fake", "text"]),
+  provider: z.enum(["fake", "text", "live"]),
   scale: z.number().int().min(1).max(MAX_SCALE).optional(),
 });
 
-// Run ids become file names, so anything that could leave the runs folder is refused.
+// Run and call ids become file names, so anything that could leave the runs folder is refused.
 const runIdSchema = z.string().regex(/^run-[A-Za-z0-9-]+$/);
+const callIdSchema = z.string().regex(/^call-[A-Za-z0-9-]+$/);
 
 type ListingLimits = {
   decideWithinMs: number;
@@ -190,10 +195,36 @@ function buildApiRouter(options: AppOptions): Router {
     response.json(summary);
   }
 
+  function handleCallAudio(request: Request, response: Response): void {
+    const runId = readRunId(request, response);
+
+    if (runId === undefined) {
+      return;
+    }
+
+    const callId = callIdSchema.safeParse(request.params.callId);
+
+    if (callId.success === false) {
+      sendError(response, 400, "Invalid call id.");
+      return;
+    }
+
+    const path = resolve(audioPath(options.runsDirectory, runId, callId.data));
+
+    if (existsSync(path) === false) {
+      sendError(response, 404, "No recording for this call.");
+      return;
+    }
+
+    response.type("audio/mpeg");
+    response.sendFile(path);
+  }
+
   router.get("/jobs", handleListJobs);
   router.post("/runs", handleStartRun);
   router.get("/runs/:id/events", handleRunEvents);
   router.get("/runs/:id/summary", handleRunSummary);
+  router.get("/runs/:id/calls/:callId/audio", handleCallAudio);
   return router;
 }
 

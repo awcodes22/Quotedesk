@@ -12,6 +12,7 @@ import {
   callElapsedMs,
   describeCallStatus,
   findFieldLabels,
+  isLiveRun,
   isTextRun,
 } from "./view.js";
 
@@ -51,6 +52,7 @@ import {
  *   steps: string[],
  *   turns: TurnModel[],
  *   typingName: string | null,
+ *   audioUrl: string | null,
  * }} TranscriptModel
  * @typedef {{
  *   call: CallCardModel,
@@ -91,6 +93,11 @@ function buildCallMeta(view, call) {
   const timer = formatClock(callElapsedMs(call, view.now));
   const turns = countCallerTurns(call);
 
+  // The transcript only arrives after a live call ends, so there are no turns to count yet.
+  if (isLiveRun(view)) {
+    return timer;
+  }
+
   if (isTextRun(view) && view.listing !== null) {
     return `${timer} · turn ${turns} of ${view.listing.maxTurns}`;
   }
@@ -116,7 +123,7 @@ function findCallStatus(view, call) {
     return { text: outcome.text, tone: OUTCOME_TONES[outcome.tone] };
   }
 
-  return describeCallStatus(call.status);
+  return describeCallStatus(call.status, isLiveRun(view));
 }
 
 /**
@@ -129,6 +136,10 @@ function buildCallCard(view, call) {
 
   if (isTextRun(view)) {
     subtitle = "Simulated front desk";
+  }
+
+  if (isLiveRun(view)) {
+    subtitle = "Live phone call";
   }
 
   return {
@@ -247,6 +258,27 @@ function buildQuoteCard(view, call, ranking) {
 }
 
 /**
+ * Live calls hang up on their own and never book, so nothing here was closed or booked.
+ * @param {View} view
+ * @param {CallState} call
+ * @param {RankedQuote | undefined} ranked
+ * @returns {string}
+ */
+function describeLiveAfterDecision(view, call, ranked) {
+  const decision = view.state.decision;
+
+  if (decision !== null && decision.kind === "commit" && decision.winner.callId === call.callId) {
+    return "Lowest total, so it's the best quote. Nothing was booked.";
+  }
+
+  if (ranked !== undefined) {
+    return `${formatMoney(ranked.gapToLeader)} above the best quote.`;
+  }
+
+  return "The call ended without a price.";
+}
+
+/**
  * @param {View} view
  * @param {CallState} call
  * @param {RankedQuote | undefined} ranked
@@ -254,6 +286,10 @@ function buildQuoteCard(view, call, ranking) {
  */
 function describeAfterDecision(view, call, ranked) {
   const decision = view.state.decision;
+
+  if (isLiveRun(view)) {
+    return describeLiveAfterDecision(view, call, ranked);
+  }
 
   if (decision !== null && decision.kind === "commit" && decision.winner.callId === call.callId) {
     const outcome = selectOutcomeLabel(view.state);
@@ -290,6 +326,10 @@ function describeStanding(view, call, ranking) {
 
   if (view.state.decision !== null) {
     return describeAfterDecision(view, call, ranked);
+  }
+
+  if (ranked !== undefined && ranked.rank === 1 && isLiveRun(view)) {
+    return `Leading. Best quote if nothing beats ${formatMoney(ranked.total)}.`;
   }
 
   if (ranked !== undefined && ranked.rank === 1) {
@@ -361,6 +401,10 @@ function buildTranscript(view, call) {
     sourceLabel = "Text simulation · no audio";
   }
 
+  if (isLiveRun(view)) {
+    sourceLabel = "Live call · recorded";
+  }
+
   if (dialedAt === null) {
     dialedAt = 0;
   }
@@ -368,6 +412,17 @@ function buildTranscript(view, call) {
   const steps = selectGettingThrough(call).map((step) => {
     return `Answered ${formatSeconds(step.afterMs)}`;
   });
+
+  if (isLiveRun(view) && call.endedAt === null) {
+    steps.push("The transcript arrives when the call ends");
+  }
+
+  let typingName = findTypingName(call);
+
+  // Nothing is typed on a live call; the whole transcript lands at the end.
+  if (isLiveRun(view)) {
+    typingName = null;
+  }
 
   const turns = call.turns.map((turn) => {
     let name = AGENT_NAME;
@@ -391,8 +446,25 @@ function buildTranscript(view, call) {
     sourceLabel,
     steps,
     turns,
-    typingName: findTypingName(call),
+    typingName,
+    audioUrl: findAudioUrl(view, call),
   };
+}
+
+/**
+ * Only a live call that ended normally has a recording.
+ * @param {View} view
+ * @param {CallState} call
+ * @returns {string | null}
+ */
+function findAudioUrl(view, call) {
+  const runId = view.state.runId;
+
+  if (isLiveRun(view) === false || call.status !== "ended" || runId === null) {
+    return null;
+  }
+
+  return `/api/runs/${encodeURIComponent(runId)}/calls/${encodeURIComponent(call.callId)}/audio`;
 }
 
 /**
@@ -602,12 +674,84 @@ function renderTyping(name) {
 }
 
 /**
+ * One button that plays or pauses the selected call's recording.
+ * The audio loads on the first press, so browsing calls downloads nothing.
+ */
+function createRecordingPlayer() {
+  const label = el("span", {}, ["Play recording"]);
+  const button = el("button", { class: "button button-small", type: "button" }, [icon("headphones", 14), label]);
+  /** @type {HTMLAudioElement | null} */
+  let audio = null;
+  /** @type {string | null} */
+  let currentUrl = null;
+
+  /** @param {string} text */
+  function showLabel(text) {
+    label.textContent = text;
+  }
+
+  function stop() {
+    if (audio !== null) {
+      audio.pause();
+    }
+
+    audio = null;
+    button.disabled = false;
+    showLabel("Play recording");
+  }
+
+  /** @param {string} url */
+  function load(url) {
+    const loaded = new Audio(url);
+    loaded.addEventListener("ended", () => showLabel("Play recording"));
+    loaded.addEventListener("error", () => {
+      showLabel("Recording unavailable");
+      button.disabled = true;
+    });
+    return loaded;
+  }
+
+  function toggle() {
+    if (currentUrl === null) {
+      return;
+    }
+
+    if (audio === null) {
+      audio = load(currentUrl);
+    }
+
+    if (audio.paused) {
+      audio.play().catch(() => showLabel("Recording unavailable"));
+      showLabel("Pause");
+    } else {
+      audio.pause();
+      showLabel("Play recording");
+    }
+  }
+
+  /** @param {string | null} url */
+  function update(url) {
+    if (url !== currentUrl) {
+      stop();
+      currentUrl = url;
+    }
+
+    button.hidden = url === null;
+  }
+
+  button.addEventListener("click", toggle);
+  button.hidden = true;
+  return { button, update };
+}
+
+/**
  * @param {HTMLElement} card
  */
 function createTranscript(card) {
   const source = el("span", { class: "panel-card-rank" });
   const steps = el("div", { class: "transcript-steps" });
   const list = el("ol", { class: "transcript-list" });
+  const player = createRecordingPlayer();
   /** @type {{ node: HTMLElement, key: string }[]} */
   let renderedTurns = [];
   /** @type {HTMLElement | null} */
@@ -618,7 +762,7 @@ function createTranscript(card) {
   card.appendChild(
     el("div", { class: "panel-card-header" }, [
       el("span", { class: "section-label" }, ["TRANSCRIPT"]),
-      source,
+      el("span", { class: "transcript-source" }, [player.button, source]),
     ]),
   );
   card.appendChild(steps);
@@ -688,6 +832,7 @@ function createTranscript(card) {
     }
 
     source.textContent = model.sourceLabel;
+    player.update(model.audioUrl);
     renderSteps(model.steps);
     renderTurns(model);
     renderTypingRow(model.typingName);

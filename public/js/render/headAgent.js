@@ -2,6 +2,7 @@
 import { clear, el, icon } from "../dom.js";
 import { capitalize, formatClock, formatMoney, pluralize } from "../format.js";
 import {
+  isLiveProvider,
   selectCalls,
   selectHeadAgentPlan,
   selectOutcomeLabel,
@@ -185,6 +186,10 @@ function describeBooking(view, winner) {
   const outcome = selectOutcomeLabel(view.state);
   const price = formatMoney(winner.total);
 
+  if (isLiveProvider(view.state.provider)) {
+    return `Best quote: ${winner.name} at ${price}`;
+  }
+
   if (outcome !== null && outcome.tone === "success") {
     return `Booked ${winner.name} at ${price}`;
   }
@@ -211,6 +216,11 @@ function buildConfirmationColumn(view) {
 
   if (confirmed && job !== null && job.contact !== undefined) {
     title = `Email to ${job.contact.email}`;
+  }
+
+  if (isLiveProvider(view.state.provider)) {
+    title = "Not booked";
+    detail = "Live calls only gather quotes";
   }
 
   return { label: "Confirmation", title, detail };

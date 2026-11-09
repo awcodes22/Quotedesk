@@ -9,7 +9,11 @@ import type {
   TranscriptLine,
 } from "../core/types";
 
+// A provider that replays a finished call can say when each line was spoken.
+export type SpokenLine = Omit<TranscriptLine, "at"> & { at?: number };
+
 export type CallContext = {
+  runId: string;
   callId: string;
   job: Job;
   industry: IndustryConfig;
@@ -17,7 +21,7 @@ export type CallContext = {
   reportQuote: (raw: unknown) => ReportResult;
   reportNote: (text: string) => void;
   onStatus: (status: CallStatus) => void;
-  onTranscript: (line: Omit<TranscriptLine, "at">) => void;
+  onTranscript: (line: SpokenLine) => void;
 };
 
 export type CallHandle = {
@@ -28,4 +32,6 @@ export type CallHandle = {
 export type CallProvider = {
   name: string;
   startCall: (context: CallContext) => CallHandle;
+  // Set when the calls only gather quotes, so the decision is a recommendation and nobody books.
+  recommendsOnly?: boolean;
 };

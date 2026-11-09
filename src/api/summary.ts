@@ -253,10 +253,11 @@ function buildStats(job: Job, quotes: SummaryQuote[]): RunSummary["stats"] {
 }
 
 // Booked only when the winner's call finished normally after hearing the commit.
+// Live calls never book, so they have no booking to confirm.
 function isBookingConfirmed(report: RunReport): boolean | null {
   const { decision } = report;
 
-  if (decision.kind === "none") {
+  if (decision.kind === "none" || report.provider === "live") {
     return null;
   }
 

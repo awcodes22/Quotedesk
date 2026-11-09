@@ -3,6 +3,7 @@ import type {
   CallContext,
   CallHandle,
   CallProvider,
+  SpokenLine,
 } from "../providers/types";
 import { emit } from "./events";
 import { DECISION_MADE_ERROR, HeadAgent } from "./headAgent";
@@ -177,8 +178,14 @@ function pushDecision(
   runId: string,
   decision: Decision,
   liveCalls: LiveCalls,
+  recommendsOnly: boolean,
 ): void {
   emit({ type: "decision", runId, at: Date.now(), decision });
+
+  // Nobody gets booked, so calls still on the line are left to finish on their own.
+  if (recommendsOnly) {
+    return;
+  }
 
   let winnerCallId: string | undefined = undefined;
 
@@ -207,12 +214,13 @@ function createHeadAgent(
   options: RunOptions,
   liveCalls: LiveCalls,
   decisionPushed: DecisionSignal,
+  recommendsOnly: boolean,
 ): HeadAgent {
   // With no grace period the agent decides inside report(), so the push waits
   // a tick to keep the winning quote's own event ahead of the decision.
   function handleDecision(decision: Decision): void {
     queueMicrotask(() => {
-      pushDecision(runId, decision, liveCalls);
+      pushDecision(runId, decision, liveCalls, recommendsOnly);
       decisionPushed.resolve(decision);
     });
   }
@@ -293,13 +301,20 @@ function createCallContext(
     emit({ type: "note", runId, at: Date.now(), callId, businessId, text });
   }
 
-  function onTranscript(spoken: Omit<TranscriptLine, "at">): void {
+  function onTranscript(spoken: SpokenLine): void {
     const at = Date.now();
-    const line = { ...spoken, at };
+    let spokenAt = at;
+
+    if (spoken.at !== undefined) {
+      spokenAt = spoken.at;
+    }
+
+    const line = { speaker: spoken.speaker, text: spoken.text, at: spokenAt };
     emit({ type: "transcript", runId, at, callId, businessId, line });
   }
 
   return {
+    runId,
     callId,
     job: run.job,
     industry: run.industry,
@@ -472,6 +487,7 @@ async function executeRun(
     options,
     liveCalls,
     decisionPushed,
+    provider.recommendsOnly === true,
   );
   const run = { runId, job, industry, provider, agent, liveCalls };
 

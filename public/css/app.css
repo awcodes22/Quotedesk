@@ -1370,6 +1370,18 @@ p {
   padding: 0 20px;
 }
 
+.button-small {
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--text-xs);
+}
+
+.transcript-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 /* ---------- Breakdown ---------- */
 
 .breakdown {
