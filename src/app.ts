@@ -23,6 +23,7 @@ import { MAX_SCALE } from "./scale";
 import { streamLiveEvents, streamRecordedEvents } from "./api/eventStream";
 import { readRecordedEvents } from "./api/registry";
 import type { RunRegistry } from "./api/registry";
+import { SelfTestLimiter } from "./api/selfTest";
 import { startRun } from "./api/startRun";
 import { summarizeRun } from "./api/summary";
 
@@ -36,13 +37,15 @@ export type AppOptions = {
   createProvider: (name: string, fakeOptions?: FakeProviderOptions) => CallProvider;
   registry: RunRegistry;
   liveLimits?: LiveLimits;
+  selfTestLimiter?: SelfTestLimiter;
 };
 
+// zod's messages for these fields never repeat the value, so a typed number can't leak through them.
 const startRunSchema = z.strictObject({
   jobId: z.string().min(1),
   provider: z.enum(["fake", "text", "live"]),
   scale: z.number().int().min(1).max(MAX_SCALE).optional(),
-  testCall: z.boolean().optional(),
+  testNumber: z.string().min(1).max(40).optional(),
 });
 
 // Run and call ids become file names, so anything that could leave the runs folder is refused.
@@ -131,6 +134,13 @@ function loadRunEvents(
 
 function buildApiRouter(options: AppOptions): Router {
   const router = express.Router();
+  let selfTestLimiter = new SelfTestLimiter();
+
+  if (options.selfTestLimiter !== undefined) {
+    selfTestLimiter = options.selfTestLimiter;
+  }
+
+  const runSettings = { ...options, selfTestLimiter };
 
   function handleListJobs(_request: Request, response: Response): void {
     const jobs = listAllJobs(options.jobsDirectory, options.privateJobsDirectory);
@@ -140,14 +150,13 @@ function buildApiRouter(options: AppOptions): Router {
       maxTurns: options.maxTurns,
     };
     const listings = jobs.map((listed) => buildJobListing(listed, limits));
-    let liveTestCall = false;
+    let selfTest = false;
 
-    // The browser only learns that a test number exists, never the number itself.
-    if (options.liveLimits !== undefined && options.liveLimits.testNumber !== undefined) {
-      liveTestCall = true;
+    if (options.liveLimits !== undefined && options.liveLimits.selfTest === true) {
+      selfTest = true;
     }
 
-    sendJson(response, 200, { jobs: listings, liveTestCall });
+    sendJson(response, 200, { jobs: listings, selfTest });
   }
 
   async function handleStartRun(
@@ -161,7 +170,7 @@ function buildApiRouter(options: AppOptions): Router {
       return;
     }
 
-    const result = await startRun(parsed.data, options);
+    const result = await startRun(parsed.data, runSettings);
 
     if (result.ok === false) {
       sendError(response, result.status, result.error);

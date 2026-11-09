@@ -58,10 +58,17 @@ function phoneNumberList() {
   return z.string().optional().transform(splitNumberList).pipe(numbers);
 }
 
-function optionalPhoneNumber() {
-  const error = "must be a number in E.164 format, such as +15555550123";
-  const number = z.string().regex(PHONE_NUMBER_PATTERN, { error }).optional();
-  return optionalText().pipe(number);
+function readSwitch(defaultValue: boolean) {
+  function toBoolean(value: "true" | "false" | undefined): boolean {
+    if (value === undefined) {
+      return defaultValue;
+    }
+
+    return value === "true";
+  }
+
+  const error = 'must be "true" or "false"';
+  return optionalText().pipe(z.enum(["true", "false"], { error }).optional()).transform(toBoolean);
 }
 
 type OpenAIValues = {
@@ -107,8 +114,8 @@ const configSchema = z
     ELEVENLABS_PHONE_NUMBER_ID: optionalText(),
     LIVE_GUEST_NAME: optionalText(),
     LIVE_ALLOWED_NUMBERS: phoneNumberList(),
-    // Always allowed, so it never has to be repeated in LIVE_ALLOWED_NUMBERS.
-    LIVE_TEST_NUMBER: optionalPhoneNumber(),
+    // Lets the dashboard ring a number typed in for one test call.
+    LIVE_SELF_TEST: readSwitch(true),
     // The ElevenLabs plan allows six calls at once, so the cap can't go higher.
     LIVE_MAX_CALLS: wholeNumber().min(1).max(6).default(6),
     LIVE_CALL_TIMEOUT_MS: wholeNumber().min(1).default(300000),

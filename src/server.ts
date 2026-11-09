@@ -3,7 +3,7 @@ import { config } from "./config";
 import { RunRegistry } from "./api/registry";
 import { startRecorder } from "./core/recorder";
 import type { LiveLimits } from "./providers/live";
-import { createProvider, listAllowedLiveNumbers } from "./providers/index";
+import { createProvider } from "./providers/index";
 
 const RUNS_DIRECTORY = "runs";
 // Gitignored, so job files with real phone numbers never reach the repo.
@@ -14,14 +14,11 @@ registry.start();
 startRecorder(RUNS_DIRECTORY);
 
 const liveLimits: LiveLimits = {
-  allowedNumbers: listAllowedLiveNumbers(config),
+  allowedNumbers: config.LIVE_ALLOWED_NUMBERS,
   maxCalls: config.LIVE_MAX_CALLS,
   callTimeoutMs: config.LIVE_CALL_TIMEOUT_MS,
+  selfTest: config.LIVE_SELF_TEST,
 };
-
-if (config.LIVE_TEST_NUMBER !== undefined) {
-  liveLimits.testNumber = config.LIVE_TEST_NUMBER;
-}
 
 const app = createApp({
   jobsDirectory: "data/jobs",

@@ -130,6 +130,8 @@ export type SimBusiness = {
   instructions: string;
   fakeQuotes: QuoteFields[];
   phone?: string;
+  // Set only for a number typed in on the dashboard for one test call.
+  selfTest?: boolean;
 };
 
 export type FieldLabel = {

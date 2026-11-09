@@ -255,15 +255,25 @@ p {
   width: 90px;
 }
 
-.picker-check {
+.picker-self-test {
+  width: 150px;
+}
+
+.self-test,
+.self-test-row {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   white-space: nowrap;
 }
 
-.picker-check[hidden] {
+.self-test[hidden],
+.self-test-row[hidden] {
   display: none;
+}
+
+.self-test-question {
+  font-weight: 600;
 }
 
 .picker-error {

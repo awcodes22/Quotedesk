@@ -19,7 +19,6 @@ export type ProviderConfig = Pick<
       | "ELEVENLABS_PHONE_NUMBER_ID"
       | "LIVE_GUEST_NAME"
       | "LIVE_ALLOWED_NUMBERS"
-      | "LIVE_TEST_NUMBER"
       | "LIVE_MAX_CALLS"
       | "LIVE_CALL_TIMEOUT_MS"
     >
@@ -46,22 +45,8 @@ function createTextProvider(config: ProviderConfig): CallProvider {
   });
 }
 
-// The test number is always allowed, so it never has to be repeated in the list.
-export function listAllowedLiveNumbers(config: ProviderConfig): string[] {
-  let allowed: string[] = [];
-
-  if (config.LIVE_ALLOWED_NUMBERS !== undefined) {
-    allowed = [...config.LIVE_ALLOWED_NUMBERS];
-  }
-
-  if (config.LIVE_TEST_NUMBER !== undefined && allowed.includes(config.LIVE_TEST_NUMBER) === false) {
-    allowed.push(config.LIVE_TEST_NUMBER);
-  }
-
-  return allowed;
-}
-
-// Only names are listed, never values, since these are keys and phone numbers.
+// Only names are listed, never values, since these are keys.
+// An empty LIVE_ALLOWED_NUMBERS is fine: test calls don't need it, and private jobs are refused per number.
 export function findMissingLiveSettings(config: ProviderConfig): string[] {
   const required: [string, unknown][] = [
     ["ELEVENLABS_API_KEY", config.ELEVENLABS_API_KEY],
@@ -77,10 +62,6 @@ export function findMissingLiveSettings(config: ProviderConfig): string[] {
     if (value === undefined) {
       missing.push(name);
     }
-  }
-
-  if (listAllowedLiveNumbers(config).length === 0) {
-    missing.push("LIVE_ALLOWED_NUMBERS or LIVE_TEST_NUMBER");
   }
 
   return missing;
@@ -100,8 +81,12 @@ function createLiveProvider(config: ProviderConfig, runsDirectory: string): Call
   const guestName = String(config.LIVE_GUEST_NAME);
   const openAIKey = String(config.OPENAI_API_KEY);
   const openAIModel = String(config.OPENAI_MODEL);
-  const allowedNumbers = listAllowedLiveNumbers(config);
+  let allowedNumbers: string[] = [];
   let maxCalls = 1;
+
+  if (config.LIVE_ALLOWED_NUMBERS !== undefined) {
+    allowedNumbers = config.LIVE_ALLOWED_NUMBERS;
+  }
   let callTimeoutMs = 300_000;
 
   if (config.LIVE_MAX_CALLS !== undefined) {

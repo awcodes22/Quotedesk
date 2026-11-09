@@ -2,7 +2,7 @@ import { onEvent } from "../core/events";
 import type { AgentEvent } from "../core/events";
 import { isRunning, runJob } from "../core/run";
 import type { RunOptions } from "../core/run";
-import type { IndustryConfig, Job, LiveBusiness } from "../core/types";
+import type { IndustryConfig, Job, LiveBusiness, SimBusiness } from "../core/types";
 import { getIndustry } from "../industries/index";
 import { listAllJobs } from "../jobs";
 import type { ListedJob } from "../jobs";
@@ -12,12 +12,15 @@ import { checkLiveBusinesses, liveRunTimeoutMs, toSimBusinesses } from "../provi
 import type { LiveLimits } from "../providers/live";
 import type { CallProvider } from "../providers/types";
 import { scaleRun } from "../scale";
+import { readSelfTestNumber, SELF_TEST_NAME } from "./selfTest";
+import type { LimiterResult, SelfTestLimiter } from "./selfTest";
 
 export type StartRunRequest = {
   jobId: string;
   provider: string;
   scale?: number;
-  testCall?: boolean;
+  // Typed on the dashboard for one test call; held in memory only and never logged.
+  testNumber?: string;
 };
 
 export type StartRunSettings = {
@@ -26,6 +29,7 @@ export type StartRunSettings = {
   runOptions: RunOptions;
   createProvider: (name: string, fakeOptions?: FakeProviderOptions) => CallProvider;
   liveLimits?: LiveLimits;
+  selfTestLimiter?: SelfTestLimiter;
 };
 
 type PreparedRun = {
@@ -37,9 +41,7 @@ type PreparedRun = {
 
 export type StartRunResult =
   | { ok: true; runId: string }
-  | { ok: false; status: 400 | 404 | 409; error: string };
-
-const TEST_CALL_NAME = "Test call";
+  | { ok: false; status: 400 | 404 | 409 | 429; error: string };
 
 function logRunFailure(error: unknown): void {
   console.error(`A run failed: ${describeError(error)}`);
@@ -128,38 +130,61 @@ function prepareRun(
   }
 }
 
-// A test call rings the developer's own phone, which the server reads from .env.
-function pickTestBusiness(limits: LiveLimits): LiveBusiness[] | string {
-  if (limits.testNumber === undefined) {
-    return "Set LIVE_TEST_NUMBER in .env to test with your phone.";
+// The number was typed on the dashboard and lives only in this call's memory, never in the job.
+function pickSelfTestCall(testNumber: string, limits: LiveLimits): SimBusiness[] | string {
+  if (limits.selfTest !== true) {
+    return "Test calls are turned off on this server (LIVE_SELF_TEST=false).";
   }
 
-  return [{ name: TEST_CALL_NAME, phone: limits.testNumber }];
+  const parsed = readSelfTestNumber(testNumber);
+
+  if (parsed.ok === false) {
+    return parsed.error;
+  }
+
+  return [
+    {
+      id: "test-call",
+      name: SELF_TEST_NAME,
+      instructions: "",
+      fakeQuotes: [],
+      phone: parsed.phone,
+      selfTest: true,
+    },
+  ];
 }
 
 // Real hotel numbers only come from the private folder, which git never sees.
-function pickJobBusinesses(listed: ListedJob): LiveBusiness[] | string {
+function pickJobCalls(listed: ListedJob, limits: LiveLimits): SimBusiness[] | string {
   if (listed.isPrivate === false) {
-    return "Live calls only use private jobs from local/jobs. Pick a (private) job or test with your phone.";
+    return "Live calls only use private jobs from local/jobs. Pick a (private) job or use Call me to test.";
   }
 
-  if (listed.job.liveBusinesses === undefined) {
-    return [];
+  let businesses: LiveBusiness[] = [];
+
+  if (listed.job.liveBusinesses !== undefined) {
+    businesses = listed.job.liveBusinesses;
   }
 
-  return listed.job.liveBusinesses;
+  const problem = checkLiveBusinesses(businesses, limits);
+
+  if (problem !== undefined) {
+    return problem;
+  }
+
+  return toSimBusinesses(businesses);
 }
 
-function pickLiveBusinesses(
+function pickLiveCalls(
   request: StartRunRequest,
   listed: ListedJob,
   limits: LiveLimits,
-): LiveBusiness[] | string {
-  if (request.testCall === true) {
-    return pickTestBusiness(limits);
+): SimBusiness[] | string {
+  if (request.testNumber !== undefined) {
+    return pickSelfTestCall(request.testNumber, limits);
   }
 
-  return pickJobBusinesses(listed);
+  return pickJobCalls(listed, limits);
 }
 
 // Live calls quote only after they hang up, so the head agent waits for every call
@@ -176,16 +201,10 @@ function prepareLiveRun(
     return "Live calls are unavailable on this server.";
   }
 
-  const businesses = pickLiveBusinesses(request, listed, limits);
+  const calls = pickLiveCalls(request, listed, limits);
 
-  if (typeof businesses === "string") {
-    return businesses;
-  }
-
-  const problem = checkLiveBusinesses(businesses, limits);
-
-  if (problem !== undefined) {
-    return problem;
+  if (typeof calls === "string") {
+    return calls;
   }
 
   if (job.stay === undefined) {
@@ -193,14 +212,14 @@ function prepareLiveRun(
   }
 
   const industry = getIndustry(job.industryId);
-  const timeoutMs = liveRunTimeoutMs(limits.callTimeoutMs, businesses.length);
+  const timeoutMs = liveRunTimeoutMs(limits.callTimeoutMs, calls.length);
 
   return {
     job: { ...withoutPhoneNumbers(job), businessIds: undefined },
-    industry: { ...industry, simBusinesses: toSimBusinesses(businesses) },
+    industry: { ...industry, simBusinesses: calls },
     runOptions: {
       ...settings.runOptions,
-      maxParallelCalls: businesses.length,
+      maxParallelCalls: calls.length,
       decisionWindowMs: timeoutMs,
       runTimeoutMs: timeoutMs,
     },
@@ -213,7 +232,7 @@ function prepareAnyRun(
   listed: ListedJob,
   settings: StartRunSettings,
 ): PreparedRun | string {
-  if (request.testCall === true && request.provider !== "live") {
+  if (request.testNumber !== undefined && request.provider !== "live") {
     return "A test call only works in Live call mode.";
   }
 
@@ -226,6 +245,14 @@ function prepareAnyRun(
   }
 
   return prepareLiveRun(request, listed, settings);
+}
+
+function takeSelfTestSlot(settings: StartRunSettings): LimiterResult {
+  if (settings.selfTestLimiter === undefined) {
+    return { ok: false, error: "Test calls are unavailable on this server." };
+  }
+
+  return settings.selfTestLimiter.take();
 }
 
 export async function startRun(
@@ -261,6 +288,15 @@ export async function startRun(
 
   if (typeof provider === "string") {
     return { ok: false, status: 400, error: provider };
+  }
+
+  // Counted last, so a rejected request never uses up one of the hour's test calls.
+  if (request.testNumber !== undefined) {
+    const slot = takeSelfTestSlot(settings);
+
+    if (slot.ok === false) {
+      return { ok: false, status: 429, error: slot.error };
+    }
   }
 
   try {

@@ -3,31 +3,34 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Stream } from "node:stream";
 import request from "supertest";
-import { afterEach, describe, expect, it } from "vitest";
-import { showsTestCall } from "../public/js/render/header.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { describeSelfTestCall, showsSelfTest } from "../public/js/render/header.js";
 import { RunRegistry } from "../src/api/registry";
+import { readSelfTestNumber, SelfTestLimiter } from "../src/api/selfTest";
 import { createApp } from "../src/app";
 import type { AppOptions } from "../src/app";
 import { emit, onEvent } from "../src/core/events";
 import type { AgentEvent } from "../src/core/events";
 import { getRunLogPath, startRecorder } from "../src/core/recorder";
 import { listAllJobs } from "../src/jobs";
-import { maskPhone, maskPhoneNumbers, maskStrings } from "../src/privacy";
+import { maskPhone, maskPhoneNumbers, maskStrings, normalizeNorthAmericanNumber } from "../src/privacy";
 import { elevenLabsClient } from "../src/providers/elevenLabs";
 import type { FetchFunction } from "../src/providers/elevenLabs";
-import { findMissingLiveSettings, listAllowedLiveNumbers } from "../src/providers/index";
+import { findMissingLiveSettings } from "../src/providers/index";
 import type { ProviderConfig } from "../src/providers/index";
 import { liveProvider } from "../src/providers/live";
 import type { LiveLimits } from "../src/providers/live";
 import { createQuoteExtractor } from "../src/providers/quoteExtractor";
 import type { CallProvider } from "../src/providers/types";
 
-// Built at runtime, so the test file itself never holds a real-looking number.
-const REAL_LOOKING = ["+1", "999", "321", "4567"].join("");
-const REAL_FORMATTED = ["(999)", "321-4567"].join(" ");
-const SECRET_DIGITS = ["321", "4567"].join("");
-const MASKED = "+1 ••• ••• ••67";
-const PLACEHOLDER = "+15555550123";
+// Only numbers reserved for fiction (555-0100 to 555-0199) appear in tests.
+const TEST_NUMBER = "+14165550123";
+const TEST_FORMATTED = "(416) 555-0123";
+const TEST_DIGITS = "4165550123";
+const MASKED = "+1 ••• ••• ••23";
+const OTHER_NUMBER = "+14165550188";
+const OTHER_DIGITS = "4165550188";
+const HOUR_MS = 60 * 60 * 1000;
 
 const tempDirectories: string[] = [];
 const stoppers: (() => void)[] = [];
@@ -55,6 +58,8 @@ function privateHotelJob(phone: string): Record<string, unknown> {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
+
   for (const stop of stoppers.splice(0)) {
     stop();
   }
@@ -64,12 +69,69 @@ afterEach(() => {
   }
 });
 
+describe("test number validation", () => {
+  it("accepts North American numbers written with spaces, dashes, dots or brackets", () => {
+    const written = [
+      "+14165550123",
+      "+1 416 555 0123",
+      "+1 (416) 555-0123",
+      "+1-416-555-0123",
+      "+1.416.555.0123",
+      " +1 (416)555 0123 ",
+      "4165550123",
+      "416 555 0123",
+      "(416) 555-0123",
+    ];
+
+    for (const input of written) {
+      expect(normalizeNorthAmericanNumber(input)).toBe(TEST_NUMBER);
+    }
+  });
+
+  it("refuses numbers that are malformed", () => {
+    const malformed = [
+      "416 555 012",
+      "14165550123",
+      "+1 416 555 012",
+      "+1 416 555 01234",
+      "+1 016 555 0123",
+      "+1 116 555 0123",
+      "+1 416 555 0123 ext 4",
+      "call me",
+      "",
+    ];
+
+    for (const input of malformed) {
+      expect(normalizeNorthAmericanNumber(input)).toBeNull();
+    }
+  });
+
+  it("refuses numbers outside North America", () => {
+    for (const input of ["+44 20 5550 0123", "+33 1 55 50 01 23", "+61 4 5550 0123"]) {
+      expect(normalizeNorthAmericanNumber(input)).toBeNull();
+    }
+  });
+
+  it("explains a bad number using only its masked form", () => {
+    const result = readSelfTestNumber("+44 20 5550 0123");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "+1 ••• ••• ••23 is not a North American number. Enter 10 digits, with or without +1.",
+    });
+  });
+
+  it("asks before dialing with the masked number only", () => {
+    expect(describeSelfTestCall(TEST_NUMBER)).toBe(`Call ${MASKED} once to test?`);
+  });
+});
+
 describe("masking", () => {
   it("masks every way a number can be written", () => {
-    const text = `a ${REAL_LOOKING} b ${REAL_FORMATTED} c ${REAL_LOOKING.slice(2)} d`;
+    const text = `a ${TEST_NUMBER} b ${TEST_FORMATTED} c ${TEST_DIGITS} d +1 416 555 0123 e`;
 
-    expect(maskPhoneNumbers(text)).toBe(`a ${MASKED} b ${MASKED} c ${MASKED} d`);
-    expect(maskPhone(REAL_LOOKING)).toBe(MASKED);
+    expect(maskPhoneNumbers(text)).toBe(`a ${MASKED} b ${MASKED} c ${MASKED} d ${MASKED} e`);
+    expect(maskPhone(TEST_NUMBER)).toBe(MASKED);
   });
 
   it("leaves prices, dates and run ids alone", () => {
@@ -79,7 +141,7 @@ describe("masking", () => {
   });
 
   it("masks strings deep inside objects without touching numbers", () => {
-    const masked = maskStrings({ notes: [`Call ${REAL_LOOKING}`], total: 412 });
+    const masked = maskStrings({ notes: [`Call ${TEST_NUMBER}`], total: 412 });
 
     expect(masked).toEqual({ notes: [`Call ${MASKED}`], total: 412 });
   });
@@ -96,20 +158,21 @@ describe("masking", () => {
       at: 1,
       callId: "call-a",
       businessId: "a",
-      text: `Their direct line is ${REAL_LOOKING}`,
+      text: `Their direct line is ${TEST_NUMBER}`,
     });
 
     const logged = readFileSync(getRunLogPath(directory, "run-privacy"), "utf8");
     expect(JSON.stringify(received)).toContain(MASKED);
-    expect(JSON.stringify(received)).not.toContain(SECRET_DIGITS);
-    expect(logged).not.toContain(SECRET_DIGITS);
+    expect(JSON.stringify(received)).not.toContain(TEST_DIGITS);
+    expect(logged).toContain(MASKED);
+    expect(logged).not.toContain(TEST_DIGITS);
   });
 });
 
 describe("private jobs", () => {
   it("lists local jobs after the committed ones and marks them private", () => {
     const privateDirectory = join(createTempDirectory(), "jobs");
-    writeJob(privateDirectory, "mine.json", privateHotelJob(PLACEHOLDER));
+    writeJob(privateDirectory, "mine.json", privateHotelJob(OTHER_NUMBER));
 
     const listed = listAllJobs("data/jobs", privateDirectory);
 
@@ -128,47 +191,52 @@ describe("private jobs", () => {
 
   it("refuses a private job that reuses a committed id", () => {
     const privateDirectory = join(createTempDirectory(), "jobs");
-    writeJob(privateDirectory, "copy.json", { ...privateHotelJob(PLACEHOLDER), id: "toronto-weekend" });
+    writeJob(privateDirectory, "copy.json", { ...privateHotelJob(OTHER_NUMBER), id: "toronto-weekend" });
 
     expect(() => listAllJobs("data/jobs", privateDirectory)).toThrow('use the id "toronto-weekend"');
   });
 });
 
-describe("LIVE_TEST_NUMBER", () => {
-  const baseConfig: ProviderConfig = {
-    OPENAI_API_KEY: "sk-test",
-    OPENAI_MODEL: "test-model",
-    MAX_TURNS: 14,
-    DECISION_WINDOW_MS: 2_000,
-    ELEVENLABS_API_KEY: "key",
-    ELEVENLABS_AGENT_ID: "agent",
-    ELEVENLABS_PHONE_NUMBER_ID: "phone",
-    LIVE_GUEST_NAME: "Jane Doe",
-  };
-
-  it("is allowed without being repeated in LIVE_ALLOWED_NUMBERS", () => {
-    const config = { ...baseConfig, LIVE_ALLOWED_NUMBERS: [PLACEHOLDER], LIVE_TEST_NUMBER: REAL_LOOKING };
-
-    expect(listAllowedLiveNumbers(config)).toEqual([PLACEHOLDER, REAL_LOOKING]);
+describe("self test switch and limit", () => {
+  it("only shows Call me to test in Live call mode with the switch on", () => {
+    expect(showsSelfTest("live", true)).toBe(true);
+    expect(showsSelfTest("live", false)).toBe(false);
+    expect(showsSelfTest("fake", true)).toBe(false);
+    expect(showsSelfTest("text", true)).toBe(false);
   });
 
-  it("is listed once when it is also in LIVE_ALLOWED_NUMBERS", () => {
-    const config = { ...baseConfig, LIVE_ALLOWED_NUMBERS: [REAL_LOOKING], LIVE_TEST_NUMBER: REAL_LOOKING };
+  it("allows three test runs an hour, then says when the next one frees up", () => {
+    let now = 0;
+    const limiter = new SelfTestLimiter(() => now);
 
-    expect(listAllowedLiveNumbers(config)).toEqual([REAL_LOOKING]);
+    expect(limiter.take()).toEqual({ ok: true });
+    now = 10 * 60 * 1000;
+    expect(limiter.take()).toEqual({ ok: true });
+    expect(limiter.take()).toEqual({ ok: true });
+
+    expect(limiter.take()).toEqual({
+      ok: false,
+      error: "Only 3 test calls are allowed per hour. Try again in 50 minutes.",
+    });
+
+    now = HOUR_MS;
+    expect(limiter.take()).toEqual({ ok: true });
   });
 
-  it("is enough on its own to turn live mode on", () => {
-    const config = { ...baseConfig, LIVE_ALLOWED_NUMBERS: [], LIVE_TEST_NUMBER: REAL_LOOKING };
+  it("turns live mode on with only the ElevenLabs and OpenAI settings", () => {
+    const config: ProviderConfig = {
+      OPENAI_API_KEY: "sk-test",
+      OPENAI_MODEL: "test-model",
+      MAX_TURNS: 14,
+      DECISION_WINDOW_MS: 2_000,
+      ELEVENLABS_API_KEY: "key",
+      ELEVENLABS_AGENT_ID: "agent",
+      ELEVENLABS_PHONE_NUMBER_ID: "phone",
+      LIVE_GUEST_NAME: "Jane Doe",
+      LIVE_ALLOWED_NUMBERS: [],
+    };
 
     expect(findMissingLiveSettings(config)).toEqual([]);
-  });
-
-  it("only shows the test option in Live call mode with a number set", () => {
-    expect(showsTestCall("live", true)).toBe(true);
-    expect(showsTestCall("live", false)).toBe(false);
-    expect(showsTestCall("fake", true)).toBe(false);
-    expect(showsTestCall("text", true)).toBe(false);
   });
 });
 
@@ -178,7 +246,11 @@ type FakeCallOptions = {
 };
 
 // One call that answers, says the number out loud, and ends.
-function createFakeLiveProvider(runsDirectory: string, options: FakeCallOptions): CallProvider {
+function createFakeLiveProvider(
+  runsDirectory: string,
+  allowedNumbers: string[],
+  options: FakeCallOptions,
+): CallProvider {
   async function fakeFetch(input: string | URL | Request): Promise<Response> {
     const url = String(input);
 
@@ -203,7 +275,7 @@ function createFakeLiveProvider(runsDirectory: string, options: FakeCallOptions)
     client: elevenLabsClient({ apiKey: "k", agentId: "a", phoneNumberId: "p", fetch: fakeFetch as FetchFunction }),
     extractQuote: createQuoteExtractor(async () => reply),
     guestName: "Jane Doe",
-    allowedNumbers: [REAL_LOOKING],
+    allowedNumbers,
     maxCalls: 6,
     callTimeoutMs: 10_000,
     runsDirectory,
@@ -212,31 +284,44 @@ function createFakeLiveProvider(runsDirectory: string, options: FakeCallOptions)
   });
 }
 
-function buildPrivacyApp(liveLimits: LiveLimits | undefined, privateJobsDirectory: string) {
+type PrivacyAppSettings = {
+  liveLimits: LiveLimits | undefined;
+  privateJobsDirectory: string;
+  selfTestLimiter?: SelfTestLimiter;
+};
+
+function buildPrivacyApp(settings: PrivacyAppSettings) {
   const runsDirectory = createTempDirectory();
   const registry = new RunRegistry();
   stoppers.push(registry.start());
   stoppers.push(startRecorder(runsDirectory));
 
+  let allowedNumbers: string[] = [];
+
+  if (settings.liveLimits !== undefined) {
+    allowedNumbers = settings.liveLimits.allowedNumbers;
+  }
+
   const callOptions = {
-    transcriptLine: `Sure. Our direct line is ${REAL_FORMATTED}, and it's 400 total.`,
-    note: `Direct line ${REAL_LOOKING}.`,
+    transcriptLine: `Sure. Our direct line is ${TEST_FORMATTED}, and it's 400 total.`,
+    note: `Direct line ${TEST_NUMBER}.`,
   };
 
   function createTestProvider(): CallProvider {
-    return createFakeLiveProvider(runsDirectory, callOptions);
+    return createFakeLiveProvider(runsDirectory, allowedNumbers, callOptions);
   }
 
   const options: AppOptions = {
     jobsDirectory: "data/jobs",
-    privateJobsDirectory,
+    privateJobsDirectory: settings.privateJobsDirectory,
     runsDirectory,
     publicDirectory: "public",
     runOptions: { maxParallelCalls: 3, decisionWindowMs: 2_000, runTimeoutMs: 5_000, settleGraceMs: 10, priceFlagPct: 10 },
     maxTurns: 14,
     createProvider: createTestProvider,
     registry,
-    liveLimits,
+    liveLimits: settings.liveLimits,
+    selfTestLimiter: settings.selfTestLimiter,
   };
 
   return { app: createApp(options), registry, runsDirectory };
@@ -268,62 +353,64 @@ async function waitForSummary(app: ReturnType<typeof createApp>, runId: string):
   throw new Error("The run never finished.");
 }
 
+function startSelfTest(app: ReturnType<typeof createApp>, testNumber: string) {
+  return request(app).post("/api/runs").send({ jobId: "toronto-weekend", provider: "live", testNumber });
+}
+
+// Test numbers skip the allowlist, so it stays empty here.
+const selfTestLimits: LiveLimits = {
+  allowedNumbers: [],
+  maxCalls: 6,
+  callTimeoutMs: 10_000,
+  selfTest: true,
+};
+
 describe("the browser API never returns a full number", () => {
-  const limits: LiveLimits = {
-    allowedNumbers: [REAL_LOOKING],
-    maxCalls: 6,
-    callTimeoutMs: 10_000,
-    testNumber: REAL_LOOKING,
-  };
-
-  it("lists private jobs as (private) and says only that a test number exists", async () => {
+  it("lists private jobs as (private) and reports whether Call me to test is on", async () => {
     const privateDirectory = join(createTempDirectory(), "jobs");
-    writeJob(privateDirectory, "mine.json", privateHotelJob(REAL_LOOKING));
-    const { app } = buildPrivacyApp(limits, privateDirectory);
+    writeJob(privateDirectory, "mine.json", privateHotelJob(OTHER_NUMBER));
+    const { app } = buildPrivacyApp({ liveLimits: selfTestLimits, privateJobsDirectory: privateDirectory });
 
     const response = await request(app).get("/api/jobs");
 
-    expect(response.body.liveTestCall).toBe(true);
+    expect(response.body.selfTest).toBe(true);
     expect(response.body.jobs[2]).toMatchObject({ id: "my-hotels", title: "My hotels (private)", isPrivate: true });
-    expect(response.text).not.toContain(SECRET_DIGITS);
-  });
-
-  it("hides the test option when LIVE_TEST_NUMBER isn't set", async () => {
-    const { app } = buildPrivacyApp({ ...limits, testNumber: undefined }, createTempDirectory());
-
-    const response = await request(app).get("/api/jobs");
-
-    expect(response.body.liveTestCall).toBe(false);
-  });
-
-  it("refuses live calls to a committed job, which can't hold real numbers", async () => {
-    const { app } = buildPrivacyApp(limits, createTempDirectory());
-
-    const response = await request(app).post("/api/runs").send({ jobId: "toronto-weekend", provider: "live" });
-
-    expect(response.status).toBe(400);
-    expect(response.body.error).toContain("private jobs from local/jobs");
+    expect(response.text).not.toContain(OTHER_DIGITS);
   });
 
   it("names a refused business without its number", async () => {
     const privateDirectory = join(createTempDirectory(), "jobs");
-    const unlisted = ["+1", "999", "321", "4500"].join("");
-    writeJob(privateDirectory, "mine.json", privateHotelJob(unlisted));
-    const { app } = buildPrivacyApp(limits, privateDirectory);
+    writeJob(privateDirectory, "mine.json", privateHotelJob(OTHER_NUMBER));
+    const { app } = buildPrivacyApp({ liveLimits: selfTestLimits, privateJobsDirectory: privateDirectory });
 
     const response = await request(app).post("/api/runs").send({ jobId: "my-hotels", provider: "live" });
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain("Corner Hotel is not on LIVE_ALLOWED_NUMBERS");
-    expect(response.text).not.toContain("3214500");
+    expect(response.text).not.toContain(OTHER_DIGITS);
   });
 
-  it("masks a test call everywhere: events, stream, run log, summary and export", async () => {
-    const { app, registry, runsDirectory } = buildPrivacyApp(limits, createTempDirectory());
+  it("refuses a bad test number with a masked error", async () => {
+    const { app } = buildPrivacyApp({ liveLimits: selfTestLimits, privateJobsDirectory: createTempDirectory() });
 
-    const started = await request(app)
-      .post("/api/runs")
-      .send({ jobId: "toronto-weekend", provider: "live", testCall: true });
+    const response = await startSelfTest(app, "+44 20 5550 0123");
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("is not a North American number");
+    expect(response.text).not.toContain("5550 0123");
+    expect(response.text).not.toContain("55500123");
+  });
+
+  it("masks a test call everywhere: events, stream, run log, summary, export and server logs", async () => {
+    const consoleLines: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...parts: unknown[]) => consoleLines.push(parts.join(" ")));
+    vi.spyOn(console, "log").mockImplementation((...parts: unknown[]) => consoleLines.push(parts.join(" ")));
+    const { app, registry, runsDirectory } = buildPrivacyApp({
+      liveLimits: selfTestLimits,
+      privateJobsDirectory: createTempDirectory(),
+    });
+
+    const started = await startSelfTest(app, "+1 (416) 555-0123");
     expect(started.status).toBe(201);
 
     const runId: string = started.body.runId;
@@ -338,14 +425,103 @@ describe("the browser API never returns a full number", () => {
 
     const eventsText = JSON.stringify(events);
     const logText = readFileSync(getRunLogPath(runsDirectory, runId), "utf8");
-
     const runStarted = events.find((event) => event.type === "run_started");
+
     expect(runStarted).toMatchObject({ businesses: [{ name: "Test call", maskedPhone: MASKED }] });
     expect(eventsText).toContain(`Our direct line is ${MASKED}`);
     expect(summary.body.winner).toMatchObject({ businessName: "Test call", total: 400 });
 
-    for (const text of [eventsText, String(stream.body), logText, summary.text]) {
-      expect(text).not.toContain(SECRET_DIGITS);
+    for (const text of [eventsText, String(stream.body), logText, summary.text, started.text, consoleLines.join("\n")]) {
+      expect(text).not.toContain(TEST_DIGITS);
+      expect(text).not.toContain("555-0123");
     }
+  });
+
+  it("runs a test call on a committed job, typed as 10 digits without +1", async () => {
+    const { app, registry } = buildPrivacyApp({ liveLimits: selfTestLimits, privateJobsDirectory: createTempDirectory() });
+
+    const started = await startSelfTest(app, "416 555 0123");
+    expect(started.status).toBe(201);
+    await waitForSummary(app, started.body.runId);
+
+    const events = registry.getEvents(started.body.runId);
+    expect(events).toBeDefined();
+    const runStarted = (events as AgentEvent[]).find((event) => event.type === "run_started");
+    expect(runStarted).toMatchObject({ businesses: [{ name: "Test call", maskedPhone: MASKED }] });
+  });
+
+  it("ignores a private job's businesses on a test call and rings only the test number", async () => {
+    const privateDirectory = join(createTempDirectory(), "jobs");
+    writeJob(privateDirectory, "mine.json", privateHotelJob(OTHER_NUMBER));
+    const { app, registry } = buildPrivacyApp({ liveLimits: selfTestLimits, privateJobsDirectory: privateDirectory });
+
+    const started = await request(app)
+      .post("/api/runs")
+      .send({ jobId: "my-hotels", provider: "live", testNumber: TEST_NUMBER });
+    expect(started.status).toBe(201);
+    await waitForSummary(app, started.body.runId);
+
+    const events = registry.getEvents(started.body.runId) as AgentEvent[];
+    const runStarted = events.find((event) => event.type === "run_started");
+    expect(runStarted).toMatchObject({ businesses: [{ id: "test-call", name: "Test call" }] });
+    expect(JSON.stringify(events)).not.toContain("Corner Hotel");
+  });
+
+  it("still refuses a normal live run on a committed job", async () => {
+    const { app } = buildPrivacyApp({ liveLimits: selfTestLimits, privateJobsDirectory: createTempDirectory() });
+
+    const response = await request(app).post("/api/runs").send({ jobId: "toronto-weekend", provider: "live" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("Live calls only use private jobs from local/jobs");
+  });
+
+  it("refuses a test number when LIVE_SELF_TEST is off, and hides the option", async () => {
+    const { app } = buildPrivacyApp({
+      liveLimits: { ...selfTestLimits, selfTest: false },
+      privateJobsDirectory: createTempDirectory(),
+    });
+
+    const listing = await request(app).get("/api/jobs");
+    const response = await startSelfTest(app, TEST_NUMBER);
+
+    expect(listing.body.selfTest).toBe(false);
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("LIVE_SELF_TEST=false");
+    expect(response.text).not.toContain(TEST_DIGITS);
+  });
+
+  it("refuses a test number outside Live call mode", async () => {
+    const { app } = buildPrivacyApp({ liveLimits: selfTestLimits, privateJobsDirectory: createTempDirectory() });
+
+    const response = await request(app)
+      .post("/api/runs")
+      .send({ jobId: "toronto-weekend", provider: "fake", testNumber: TEST_NUMBER });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("only works in Live call mode");
+  });
+
+  it("returns 429 once the hour's test calls are used up, without spending one on a bad number", async () => {
+    const limiter = new SelfTestLimiter();
+    limiter.take();
+    limiter.take();
+    const { app } = buildPrivacyApp({
+      liveLimits: selfTestLimits,
+      privateJobsDirectory: createTempDirectory(),
+      selfTestLimiter: limiter,
+    });
+
+    const badNumber = await startSelfTest(app, "+1 416 555");
+    expect(badNumber.status).toBe(400);
+
+    const third = await startSelfTest(app, TEST_NUMBER);
+    expect(third.status).toBe(201);
+    await waitForSummary(app, third.body.runId);
+
+    const fourth = await startSelfTest(app, TEST_NUMBER);
+    expect(fourth.status).toBe(429);
+    expect(fourth.body.error).toContain("Only 3 test calls are allowed per hour");
+    expect(fourth.text).not.toContain(TEST_DIGITS);
   });
 });

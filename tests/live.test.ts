@@ -593,7 +593,6 @@ describe("live settings", () => {
       "LIVE_GUEST_NAME",
       "OPENAI_API_KEY",
       "OPENAI_MODEL",
-      "LIVE_ALLOWED_NUMBERS or LIVE_TEST_NUMBER",
     ]);
     expect(() => createProvider("live", noLiveConfig)).toThrow("Live calls are unavailable");
   });

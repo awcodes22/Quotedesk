@@ -17,7 +17,8 @@ export type LiveLimits = {
   allowedNumbers: string[];
   maxCalls: number;
   callTimeoutMs: number;
-  testNumber?: string;
+  // Whether the dashboard may ring a number typed in for one test call.
+  selfTest?: boolean;
 };
 
 export type LiveProviderOptions = LiveLimits & {
@@ -434,12 +435,18 @@ function findRefusal(
   callsStarted: number,
 ): string | undefined {
   const phone = context.business.phone;
+  // A test number was typed in on the dashboard and checked by the server, so it skips the allowlist.
+  const isSelfTest = context.business.selfTest === true;
 
   if (callsStarted >= options.maxCalls) {
     return `LIVE_MAX_CALLS allows ${options.maxCalls} calls per run.`;
   }
 
-  if (phone === undefined || options.allowedNumbers.includes(phone) === false) {
+  if (phone === undefined) {
+    return `${context.business.name} has no phone number, so it was not dialed.`;
+  }
+
+  if (isSelfTest === false && options.allowedNumbers.includes(phone) === false) {
     return `${context.business.name} is not on LIVE_ALLOWED_NUMBERS, so it was not dialed.`;
   }
 

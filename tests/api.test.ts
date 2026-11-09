@@ -150,7 +150,7 @@ describe("GET /api/jobs", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.jobs).toHaveLength(2);
-    expect(response.body.liveTestCall).toBe(false);
+    expect(response.body.selfTest).toBe(false);
     expect(response.body.jobs[0]).toMatchObject({
       id: "airport-rental",
       title: "3-day airport rental",

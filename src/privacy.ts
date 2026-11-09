@@ -1,3 +1,5 @@
+import { maskPhone, normalizeNorthAmericanNumber } from "../public/js/phone.js";
+
 // Phone numbers in any form a person or a transcript might write them: +14165550123,
 // (416) 555-0123, 416.555.0123, +1 416 555 0123 or a bare 4165550123.
 const PHONE_PATTERN = new RegExp(
@@ -9,12 +11,7 @@ const PHONE_PATTERN = new RegExp(
   "g",
 );
 
-// The last two digits are enough to tell numbers apart without revealing them.
-export function maskPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  const lastTwo = digits.slice(-2);
-  return `+1 ••• ••• ••${lastTwo}`;
-}
+export { maskPhone, normalizeNorthAmericanNumber };
 
 export function maskPhoneNumbers(text: string): string {
   return text.replace(PHONE_PATTERN, maskPhone);

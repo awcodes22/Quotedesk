@@ -18,7 +18,7 @@ import { createTracker, selectTrackerModel } from "./render/tracker.js";
  * @typedef {import("./render/view.js").GridFilter} GridFilter
  * @typedef {import("./render/view.js").GridSort} GridSort
  * @typedef {import("./render/header.js").StartRequest} StartRequest
- * @typedef {{ jobs: JobListing[], liveTestCall: boolean }} JobCatalog
+ * @typedef {{ jobs: JobListing[], selfTest: boolean }} JobCatalog
  *
  * @typedef {{
  *   state: RunState,
@@ -58,7 +58,7 @@ async function fetchJobCatalog() {
   }
 
   const body = await response.json();
-  return { jobs: body.jobs, liveTestCall: body.liveTestCall === true };
+  return { jobs: body.jobs, selfTest: body.selfTest === true };
 }
 
 /**
@@ -349,7 +349,7 @@ function showRun(runId, jobs) {
  */
 function showPicker(catalog) {
   findElement("empty-state").hidden = false;
-  createPickerHeader(findElement("topbar"), catalog.jobs, catalog.liveTestCall, startRun);
+  createPickerHeader(findElement("topbar"), catalog.jobs, catalog.selfTest, startRun);
 }
 
 /**
@@ -363,7 +363,7 @@ function showLoadError(message) {
 
 async function main() {
   /** @type {JobCatalog} */
-  let catalog = { jobs: [], liveTestCall: false };
+  let catalog = { jobs: [], selfTest: false };
 
   try {
     catalog = await fetchJobCatalog();

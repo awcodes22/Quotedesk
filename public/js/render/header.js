@@ -2,6 +2,7 @@
 import { clear, el, icon } from "../dom.js";
 import { formatClock, formatDuration, pluralize } from "../format.js";
 import { ICONS } from "../icons.js";
+import { maskPhone, normalizeNorthAmericanNumber } from "../phone.js";
 import { findBusinessNoun, runElapsedMs } from "./view.js";
 
 /**
@@ -13,7 +14,7 @@ import { findBusinessNoun, runElapsedMs } from "./view.js";
  * @typedef {{ icon: IconName | null, label: string, value: string }} RequestField
  * @typedef {{ fields: RequestField[], finished: boolean, elapsed: string }} RunHeaderModel
  * @typedef {"fake" | "text" | "live"} ProviderName
- * @typedef {{ jobId: string, provider: ProviderName, scale?: number, testCall?: boolean }} StartRequest
+ * @typedef {{ jobId: string, provider: ProviderName, scale?: number, testNumber?: string }} StartRequest
  * @typedef {{ fields: HTMLElement, right: HTMLElement }} HeaderFrame
  */
 
@@ -252,57 +253,162 @@ function readScale(provider, scaleInput) {
 }
 
 /**
- * The test call needs a number set on the server, and only makes sense for live calls.
+ * The option needs the server's switch on, and only makes sense for live calls.
  * @param {string} provider
- * @param {boolean} liveTestCall
+ * @param {boolean} selfTest
  * @returns {boolean}
  */
-export function showsTestCall(provider, liveTestCall) {
-  return liveTestCall && provider === "live";
+export function showsSelfTest(provider, selfTest) {
+  return selfTest && provider === "live";
 }
 
 /**
- * The browser never holds the number; ticking this only asks the server to dial its own.
- * @returns {{ label: HTMLLabelElement, checkbox: HTMLInputElement }}
+ * @param {string} number A number already checked by normalizeNorthAmericanNumber.
+ * @returns {string}
  */
-function renderTestCallOption() {
-  const checkbox = el("input", { type: "checkbox" });
-  const label = el("label", { class: "picker-check", title: "One live call to LIVE_TEST_NUMBER, named Test call" }, [
-    checkbox,
-    "Test with my phone",
-  ]);
+export function describeSelfTestCall(number) {
+  return `Call ${maskPhone(number)} once to test?`;
+}
 
-  return { label, checkbox };
+const SELF_TEST_FORMAT_ERROR = "Enter a North American number: 10 digits, with or without +1.";
+
+/**
+ * The number is only ever in this input and in the one request that starts the call.
+ * No name the browser would autofill or remember, and nothing is saved anywhere.
+ * @returns {HTMLInputElement}
+ */
+function renderSelfTestInput() {
+  return el("input", {
+    class: "picker-select picker-self-test",
+    type: "tel",
+    name: "call-me-to-test",
+    autocomplete: "off",
+    placeholder: "+1 your number",
+    "aria-label": "Your number for one test call",
+  });
+}
+
+/**
+ * Asks before dialing, showing only the masked number.
+ * @param {(number: string) => Promise<string | null>} onCall Starts the call; resolves with an error or null.
+ * @param {(message: string) => void} showError
+ */
+function createSelfTestOption(onCall, showError) {
+  const input = renderSelfTestInput();
+  const askButton = el("button", { class: "button", type: "button" }, ["Call me to test"]);
+  const question = el("span", { class: "self-test-question" });
+  const callButton = el("button", { class: "button button-primary", type: "button" }, ["Call me"]);
+  const cancelButton = el("button", { class: "button", type: "button" }, ["Cancel"]);
+  const asking = el("span", { class: "self-test-row" }, [input, askButton]);
+  const confirming = el("span", { class: "self-test-row" }, [question, callButton, cancelButton]);
+  const root = el("span", { class: "self-test" }, [asking, confirming]);
+  /** @type {string | null} */
+  let pendingNumber = null;
+
+  /** @param {boolean} isConfirming */
+  function showStep(isConfirming) {
+    asking.hidden = isConfirming;
+    confirming.hidden = isConfirming === false;
+  }
+
+  function ask() {
+    showError("");
+    const number = normalizeNorthAmericanNumber(input.value);
+
+    if (number === null) {
+      showError(SELF_TEST_FORMAT_ERROR);
+      return;
+    }
+
+    pendingNumber = number;
+    question.textContent = describeSelfTestCall(number);
+    showStep(true);
+  }
+
+  function cancel() {
+    pendingNumber = null;
+    question.textContent = "";
+    showStep(false);
+  }
+
+  async function call() {
+    if (pendingNumber === null) {
+      return;
+    }
+
+    callButton.disabled = true;
+    const error = await onCall(pendingNumber);
+    callButton.disabled = false;
+
+    if (error !== null) {
+      showError(error);
+      cancel();
+      return;
+    }
+
+    // The run has started, so the number has nothing left to do in the page.
+    input.value = "";
+    cancel();
+  }
+
+  function hasNumber() {
+    return input.value.trim() !== "";
+  }
+
+  askButton.addEventListener("click", ask);
+  cancelButton.addEventListener("click", cancel);
+  callButton.addEventListener("click", call);
+  showStep(false);
+  return { root, ask, hasNumber };
 }
 
 /**
  * Before a run, the header holds only the picker; the request fields arrive with the run.
  * @param {HTMLElement} header
  * @param {JobListing[]} jobs
- * @param {boolean} liveTestCall Whether the server has a test number to dial.
+ * @param {boolean} selfTest Whether the server allows Call me to test.
  * @param {(request: StartRequest) => Promise<string | null>} onStart Resolves with an error to show, or null.
  */
-export function createPickerHeader(header, jobs, liveTestCall, onStart) {
+export function createPickerHeader(header, jobs, selfTest, onStart) {
   const frame = buildHeaderFrame(header);
   const jobSelect = renderJobSelect(jobs);
   const providerSelect = renderProviderSelect();
   const scaleInput = renderScaleInput();
-  const testCall = renderTestCallOption();
   const startButton = el("button", { class: "button button-primary", type: "button" }, [
     "Start calls",
   ]);
   const errorText = el("span", { class: "picker-error", role: "alert" });
 
+  /** @param {string} message */
+  function showError(message) {
+    errorText.textContent = message;
+  }
+
+  /** @param {string} testNumber */
+  function startSelfTest(testNumber) {
+    return onStart({ jobId: jobSelect.value, provider: "live", testNumber });
+  }
+
+  const selfTestOption = createSelfTestOption(startSelfTest, showError);
+
   function showModeOptions() {
     scaleInput.hidden = providerSelect.value !== "fake";
-    testCall.label.hidden = showsTestCall(providerSelect.value, liveTestCall) === false;
+    selfTestOption.root.hidden = showsSelfTest(providerSelect.value, selfTest) === false;
   }
 
   async function startCalls() {
-    startButton.disabled = true;
-    errorText.textContent = "";
-
     const provider = readProvider(providerSelect.value);
+
+    // A typed number means a test call, which has to go through its own confirm step.
+    // Starting a normal live run here would ignore the number and dial the job's businesses.
+    if (showsSelfTest(provider, selfTest) && selfTestOption.hasNumber()) {
+      selfTestOption.ask();
+      return;
+    }
+
+    startButton.disabled = true;
+    showError("");
+
     /** @type {StartRequest} */
     const request = { jobId: jobSelect.value, provider };
     const scale = readScale(provider, scaleInput);
@@ -311,14 +417,10 @@ export function createPickerHeader(header, jobs, liveTestCall, onStart) {
       request.scale = scale;
     }
 
-    if (showsTestCall(provider, liveTestCall) && testCall.checkbox.checked) {
-      request.testCall = true;
-    }
-
     const error = await onStart(request);
 
     if (error !== null) {
-      errorText.textContent = error;
+      showError(error);
       startButton.disabled = false;
     }
   }
@@ -328,7 +430,7 @@ export function createPickerHeader(header, jobs, liveTestCall, onStart) {
   showModeOptions();
   frame.right.appendChild(errorText);
   frame.right.appendChild(jobSelect);
-  frame.right.appendChild(testCall.label);
+  frame.right.appendChild(selfTestOption.root);
   frame.right.appendChild(providerSelect);
   frame.right.appendChild(scaleInput);
   frame.right.appendChild(startButton);
