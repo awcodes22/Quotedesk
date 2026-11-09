@@ -32,6 +32,7 @@ import {
  *   heading: string,
  *   rank: string,
  *   price: string | null,
+ *   emptyPrice: string,
  *   gapText: string,
  *   gapTone: "win" | "alert" | "muted",
  *   fields: QuoteFieldModel[],
@@ -182,6 +183,19 @@ function formatFieldValue(value) {
 }
 
 /**
+ * A finished call that never quoted won't get a price, so it stops saying "yet".
+ * @param {CallState} call
+ * @returns {string}
+ */
+export function describeEmptyPrice(call) {
+  if (call.endedAt === null) {
+    return "No price yet";
+  }
+
+  return "No price given";
+}
+
+/**
  * On a test call the person answering is the user; on a real live call it is whoever staffs the desk.
  * @param {View} view
  * @param {CallState} call
@@ -294,6 +308,7 @@ function buildQuoteCard(view, call, ranking) {
     heading,
     rank,
     price,
+    emptyPrice: describeEmptyPrice(call),
     ...describeGap(ranked, view.state.decision !== null),
     fields: buildQuoteFields(view, call),
     notes: call.notes,
@@ -614,7 +629,7 @@ function renderQuoteCard(card, model) {
     ]),
   );
 
-  let price = el("span", { class: "quote-price quote-price-empty" }, ["No price yet"]);
+  let price = el("span", { class: "quote-price quote-price-empty" }, [model.emptyPrice]);
 
   if (model.price !== null) {
     price = el("span", { class: "quote-price tabular" }, [model.price]);

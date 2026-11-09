@@ -22,6 +22,7 @@ import {
   buildDynamicVariables,
   checkLiveBusinesses,
   cleanSpokenText,
+  FIRST_MESSAGE_INTROS,
   formatStayDates,
   liveProvider,
   toSimBusinesses,
@@ -262,13 +263,15 @@ describe("formatStayDates", () => {
 
 describe("buildDynamicVariables", () => {
   it("fills every variable the agent prompt uses, with no ISO dates", () => {
-    const variables = buildDynamicVariables(liveJob(), "Jane Doe");
+    const variables = buildDynamicVariables(liveJob(), "Jane Doe", "live");
 
     expect(variables).toEqual({
       request: "a room for 2 guests for 2 nights",
       dates: "November 20 to 22",
       beds: "one king bed",
       guest_name: "Jane Doe",
+      call_mode: "live",
+      first_message_intro: FIRST_MESSAGE_INTROS.live,
     });
     expect(JSON.stringify(variables)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
@@ -394,9 +397,42 @@ describe("live provider", () => {
           dates: "November 20 to 22",
           beds: "one king bed",
           guest_name: "Jane Doe",
+          call_mode: "live",
+          first_message_intro: FIRST_MESSAGE_INTROS.live,
         },
       },
     });
+  });
+
+  it("tells the agent a Call me to test run is a test, with the test intro", async () => {
+    const fake = createFakeElevenLabs({ statuses: ["done"], transcript: [] });
+    const provider = liveProvider(buildOptions(fake, { allowedNumbers: [] }));
+    const testBusiness: SimBusiness = { ...buildBusiness("test-call", ALLOWED), name: "Test call", selfTest: true };
+
+    await settle(provider.startCall(buildContext(testBusiness, createLog())).done);
+
+    const body = required(required(fake.requests[0]).body);
+    const clientData = body.conversation_initiation_client_data as { dynamic_variables: Record<string, string> };
+
+    expect(clientData.dynamic_variables.call_mode).toBe("test");
+    expect(clientData.dynamic_variables.first_message_intro).toBe(
+      "Hi, this is a QuoteDesk test call. I'm the AI agent that calls hotels for quotes. For this call, you play the hotel front desk and I'll ask for a rate just like I would on a real call. Ready when you are.",
+    );
+  });
+
+  it("tells the agent a normal run is live, with the live intro", async () => {
+    const fake = createFakeElevenLabs({ statuses: ["done"], transcript: [] });
+    const provider = liveProvider(buildOptions(fake));
+
+    await settle(provider.startCall(buildContext(buildBusiness("a", ALLOWED), createLog())).done);
+
+    const body = required(required(fake.requests[0]).body);
+    const clientData = body.conversation_initiation_client_data as { dynamic_variables: Record<string, string> };
+
+    expect(clientData.dynamic_variables.call_mode).toBe("live");
+    expect(clientData.dynamic_variables.first_message_intro).toBe(
+      "Hi there, I'm an assistant calling on behalf of a guest who's looking to book a stay. Just so you know, this call may be recorded. Do you have a quick moment to check a rate for me?",
+    );
   });
 
   it("polls every 3 seconds until done, then reports the transcript, quote and notes", async () => {

@@ -172,7 +172,7 @@ afterAll(() => {
 });
 
 describe("runReducer on a recorded fake run", () => {
-  it("ends with the run done and Queen West confirmed at 398", () => {
+  it("ends with the run done and Queen West quoted at 398", () => {
     const state = reduceAll(recordedEvents);
 
     expect(selectRunStatus(state)).toBe("done");
@@ -187,7 +187,7 @@ describe("runReducer on a recorded fake run", () => {
       gapToLeader: 0,
     });
     expect(selectOutcomeLabel(state)).toEqual({
-      text: "Confirmed",
+      text: "Quoted",
       tone: "success",
     });
   });
@@ -331,14 +331,14 @@ describe("outcome label", () => {
     });
   });
 
-  it("shows Confirmed when the winner's call ends normally", () => {
+  it("shows Quoted when the winner's call ends normally", () => {
     const events = [
       ...eventsThroughCommit(),
       winnerStatusEvent("ended"),
     ];
 
     expect(selectOutcomeLabel(reduceAll(events))).toEqual({
-      text: "Confirmed",
+      text: "Quoted",
       tone: "success",
     });
   });

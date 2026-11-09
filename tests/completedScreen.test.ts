@@ -1,6 +1,13 @@
+import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
-import { businessSpeakerName, describeMissingField, selectCallPanelModel } from "../public/js/render/callPanel.js";
+import {
+  businessSpeakerName,
+  describeEmptyPrice,
+  describeMissingField,
+  selectCallPanelModel,
+} from "../public/js/render/callPanel.js";
 import { selectCompletedBarModel } from "../public/js/render/completedBar.js";
+import { selectGridModel } from "../public/js/render/grid.js";
 import { buildRequestFields } from "../public/js/render/header.js";
 import { countFinishedLines, selectHeadAgentModel } from "../public/js/render/headAgent.js";
 import { selectTopCardsModel } from "../public/js/render/topCards.js";
@@ -13,7 +20,10 @@ import {
   selectGridState,
 } from "../public/js/state.js";
 import type { CallState, RunState } from "../public/js/state.js";
+import { RunRegistry } from "../src/api/registry";
+import { createApp } from "../src/app";
 import type { AgentEvent } from "../src/core/events";
+import { fakeProvider } from "../src/providers/fake";
 import type { CallStatus, Decision, Job, TranscriptLine } from "../src/core/types";
 import { hotels } from "../src/industries/hotels";
 import { loadJob } from "../src/jobs";
@@ -38,14 +48,17 @@ function liveJob(): Job {
   return { ...loadJob("data/jobs/hotels.json"), guestName: GUEST_NAME };
 }
 
-function started(businesses: { id: string; name: string; maskedPhone?: string }[]): AgentEvent {
+function started(
+  businesses: { id: string; name: string; maskedPhone?: string }[],
+  provider: string = "live",
+): AgentEvent {
   return {
     type: "run_started",
     runId: RUN_ID,
     at: 0,
     job: liveJob(),
     industryLabel: "Hotel rooms",
-    provider: "live",
+    provider,
     businesses,
   };
 }
@@ -331,7 +344,7 @@ describe("test call screen", () => {
     const fields = buildRequestFields(job, "Hotel rooms", 1, null, isSelfTestRun(state));
 
     expect(fields).toContainEqual({ icon: "phone", label: "Calling", value: "Test call" });
-    expect(fields).toContainEqual({ icon: "user", label: "Booking for", value: GUEST_NAME });
+    expect(fields).toContainEqual({ icon: "user", label: "Guest", value: GUEST_NAME });
     expect(businessSpeakerName(buildView(state), onlyCall(state))).toBe("You");
   });
 
@@ -340,5 +353,118 @@ describe("test call screen", () => {
     const state = reduceAll(events);
 
     expect(businessSpeakerName(buildView(state), onlyCall(state))).toBe("Front desk");
+  });
+});
+
+function businessIds(count: number): { id: string; name: string }[] {
+  const businesses: { id: string; name: string }[] = [];
+
+  for (let index = 1; index <= count; index += 1) {
+    businesses.push({ id: `hotel-${index}`, name: `Hotel ${index}` });
+  }
+
+  return businesses;
+}
+
+// A Demo run where the winner heard the commit and ended its call normally.
+function demoRunWithWinner(): AgentEvent[] {
+  const decision: Decision = {
+    kind: "commit",
+    winner: { callId: "call-corner", businessId: "corner", total: 400, fields: { total: 400 }, receivedAt: 5_000 },
+    others: [],
+    reason: "all-settled",
+  };
+
+  return [
+    started([{ id: "corner", name: "Corner Hotel" }], "fake"),
+    status("corner", "connecting", 1_000),
+    status("corner", "talking", 2_000),
+    quote("corner", 400, 5_000),
+    { type: "decision", runId: RUN_ID, at: 6_000, decision },
+    {
+      type: "decision_pushed",
+      runId: RUN_ID,
+      at: 6_001,
+      callId: "call-corner",
+      businessId: "corner",
+      command: "commit",
+      delivered: true,
+    },
+    status("corner", "ended", 7_000),
+  ];
+}
+
+describe("small UI fixes", () => {
+  it("labels the guest Guest in the header", () => {
+    const fields = buildRequestFields(liveJob(), "Hotel rooms", 3, null);
+
+    expect(fields).toContainEqual({ icon: "user", label: "Guest", value: GUEST_NAME });
+    expect(JSON.stringify(fields)).not.toContain("Booking for");
+  });
+
+  it("gives every new run LIVE_GUEST_NAME, not the job's contact", async () => {
+    const registry = new RunRegistry();
+    const stop = registry.start();
+    const app = createApp({
+      jobsDirectory: "data/jobs",
+      runsDirectory: "runs-unused",
+      publicDirectory: "public",
+      runOptions: { maxParallelCalls: 3, decisionWindowMs: 2_000, runTimeoutMs: 5_000, settleGraceMs: 10, priceFlagPct: 10 },
+      maxTurns: 14,
+      createProvider: () => fakeProvider({ stepMs: 1 }),
+      registry,
+      liveLimits: { allowedNumbers: [], maxCalls: 6, callTimeoutMs: 10_000, guestName: GUEST_NAME },
+    });
+
+    const response = await request(app).post("/api/runs").send({ jobId: "toronto-weekend", provider: "fake" });
+    const events = registry.getEvents(response.body.runId);
+    stop();
+
+    expect(response.status).toBe(201);
+    expect(events).toBeDefined();
+    const runStarted = (events as AgentEvent[]).find((event) => event.type === "run_started");
+    expect(runStarted).toMatchObject({ job: { guestName: GUEST_NAME } });
+  });
+
+  it("says Quoted, not Confirmed, when a Demo or Chats winner ends its call", () => {
+    const state = reduceAll(demoRunWithWinner());
+    const view = buildView(state);
+    const sentence = selectCompletedBarModel(view).sentence.map((part) => part.text).join("");
+
+    expect(sentence).toContain("Quoted Corner Hotel at $400");
+    expect(JSON.stringify([selectCompletedBarModel(view), selectHeadAgentModel(view)])).not.toContain("Confirmed");
+  });
+
+  it("says No price given once a call has ended without one", () => {
+    const state = reduceAll(testCallWithoutPrice());
+    const openState = reduceAll(testCallWithoutPrice().slice(0, 5));
+
+    expect(describeEmptyPrice(onlyCall(openState))).toBe("No price yet");
+    expect(selectCallPanelModel(buildView(state), onlyCall(state)).quote.emptyPrice).toBe("No price given");
+  });
+
+  it("keeps the neutral agent icon when there is no winner, and the check when there is one", () => {
+    const noWinner = selectHeadAgentModel(buildView(reduceAll(testCallWithoutPrice())));
+    const withWinner = selectHeadAgentModel(buildView(reduceAll([...demoRunWithWinner(), ...finished(noQuotes, 8_000).slice(1)])));
+
+    expect(noWinner).toMatchObject({ finished: true, hasWinner: false });
+    expect(withWinner).toMatchObject({ finished: true, hasWinner: true });
+  });
+
+  it("hides the grid when the cards already show every call", () => {
+    for (const count of [1, 4]) {
+      const model = selectGridModel(buildView(reduceAll([started(businessIds(count))])));
+      expect(model.hidden).toBe(true);
+    }
+
+    const bigRun = selectGridModel(buildView(reduceAll([started(businessIds(5))])));
+    expect(bigRun.hidden).toBe(false);
+  });
+
+  it("gives a run of exactly 4 calls a card for each, quoted or not", () => {
+    const cards = selectTopCardsModel(buildView(reduceAll([started(businessIds(4))])));
+
+    expect(cards.slotCount).toBe(4);
+    expect(cards.pending).toHaveLength(4);
   });
 });

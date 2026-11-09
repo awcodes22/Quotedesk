@@ -77,7 +77,7 @@ export function buildRequestFields(job, industryLabel, callCount, listing, selfT
   }
 
   if (guestName !== null) {
-    fields.push({ icon: "user", label: "Booking for", value: guestName });
+    fields.push({ icon: "user", label: "Guest", value: guestName });
   }
 
   return fields;

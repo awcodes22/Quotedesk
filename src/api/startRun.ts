@@ -213,15 +213,9 @@ function prepareLiveRun(
 
   const industry = getIndustry(job.industryId);
   const timeoutMs = liveRunTimeoutMs(limits.callTimeoutMs, calls.length);
-  const liveJob: Job = { ...withoutPhoneNumbers(job), businessIds: undefined };
-
-  // The caller gives LIVE_GUEST_NAME on the phone, so that is who the quote is for, not the job's contact.
-  if (limits.guestName !== undefined) {
-    liveJob.guestName = limits.guestName;
-  }
 
   return {
-    job: liveJob,
+    job: { ...withoutPhoneNumbers(job), businessIds: undefined },
     industry: { ...industry, simBusinesses: calls },
     runOptions: {
       ...settings.runOptions,
@@ -251,6 +245,17 @@ function prepareAnyRun(
   }
 
   return prepareLiveRun(request, listed, settings);
+}
+
+// Every run is for LIVE_GUEST_NAME when it is set, so the header names the same guest in every mode.
+function withGuestName(job: Job, settings: StartRunSettings): Job {
+  const limits = settings.liveLimits;
+
+  if (limits === undefined || limits.guestName === undefined) {
+    return job;
+  }
+
+  return { ...job, guestName: limits.guestName };
 }
 
 function takeSelfTestSlot(settings: StartRunSettings): LimiterResult {
@@ -307,7 +312,7 @@ export async function startRun(
 
   try {
     const runId = await launchRun(
-      prepared.job,
+      withGuestName(prepared.job, settings),
       prepared.industry,
       provider,
       prepared.runOptions,

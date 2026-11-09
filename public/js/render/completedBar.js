@@ -39,7 +39,7 @@ function describeConfirmedBooking(view, winner) {
   }
 
   return [
-    { text: `Confirmed ${winner.name} at `, bold: false },
+    { text: `Quoted ${winner.name} at `, bold: false },
     { text: formatMoney(winner.total), bold: true },
     { text: `${termText}.${confirmation}`, bold: false },
   ];

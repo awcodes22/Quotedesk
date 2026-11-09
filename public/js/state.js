@@ -757,7 +757,7 @@ export function selectStats(state) {
 }
 
 /**
- * Confirmed only once the winner's call ends normally after hearing the commit.
+ * Quoted only once the winner's call ends normally after hearing the commit.
  * @param {RunState} state
  * @returns {OutcomeLabel | null}
  */
@@ -786,7 +786,7 @@ export function selectOutcomeLabel(state) {
   }
 
   if (winner.status === "ended") {
-    return { text: "Confirmed", tone: "success" };
+    return { text: "Quoted", tone: "success" };
   }
 
   if (winner.status === "failed" || state.finishedAt !== null) {

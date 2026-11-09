@@ -94,7 +94,28 @@ export function speakDates(text: string): string {
   return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, speakDay);
 }
 
-export function buildDynamicVariables(job: Job, guestName: string): Record<string, string> {
+export type CallMode = "test" | "live";
+
+// The agent opens with this line. A test call tells the person they are playing the front desk;
+// a real call says up front that it is an assistant and that the call may be recorded.
+export const FIRST_MESSAGE_INTROS: Record<CallMode, string> = {
+  test: "Hi, this is a QuoteDesk test call. I'm the AI agent that calls hotels for quotes. For this call, you play the hotel front desk and I'll ask for a rate just like I would on a real call. Ready when you are.",
+  live: "Hi there, I'm an assistant calling on behalf of a guest who's looking to book a stay. Just so you know, this call may be recorded. Do you have a quick moment to check a rate for me?",
+};
+
+export function findCallMode(business: SimBusiness): CallMode {
+  if (business.selfTest === true) {
+    return "test";
+  }
+
+  return "live";
+}
+
+export function buildDynamicVariables(
+  job: Job,
+  guestName: string,
+  callMode: CallMode,
+): Record<string, string> {
   const stay = requireStay(job);
 
   return {
@@ -102,6 +123,8 @@ export function buildDynamicVariables(job: Job, guestName: string): Record<strin
     dates: formatStayDates(stay.checkIn, stay.checkOut),
     beds: stay.beds,
     guest_name: guestName,
+    call_mode: callMode,
+    first_message_intro: FIRST_MESSAGE_INTROS[callMode],
   };
 }
 
@@ -251,7 +274,8 @@ class LiveCall {
 
   private async playCall(): Promise<CallOutcome> {
     const phone = this.requirePhone();
-    const variables = buildDynamicVariables(this.context.job, this.options.guestName);
+    const callMode = findCallMode(this.context.business);
+    const variables = buildDynamicVariables(this.context.job, this.options.guestName, callMode);
 
     await pause(this.startDelayMs);
 

@@ -206,7 +206,7 @@ function buildPendingCard(view, call) {
 }
 
 /**
- * With fewer calls than slots, every call gets its own card, quoted or not, and no slot sits empty.
+ * With no more calls than slots, every call gets its own card, quoted or not, and no slot sits empty.
  * @param {View} view
  * @returns {TopCardsModel}
  */
@@ -217,7 +217,7 @@ export function selectTopCardsModel(view) {
   /** @type {PendingCardModel[]} */
   let pending = [];
 
-  if (callCount < SLOT_COUNT) {
+  if (callCount <= SLOT_COUNT) {
     const unquoted = selectCalls(view.state).filter((call) => call.quote === null);
     pending = unquoted.map((call) => buildPendingCard(view, call));
   }

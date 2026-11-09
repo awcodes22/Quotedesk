@@ -33,7 +33,13 @@ import {
  *   selected: boolean,
  *   dim: boolean,
  * }} SquareModel
- * @typedef {{ chips: ChipModel[], squares: SquareModel[], finished: boolean, winnerLabel: string }} GridModel
+ * @typedef {{
+ *   chips: ChipModel[],
+ *   squares: SquareModel[],
+ *   finished: boolean,
+ *   winnerLabel: string,
+ *   hidden: boolean,
+ * }} GridModel
  *
  * @typedef {{
  *   onSelect: (callId: string) => void,
@@ -42,6 +48,9 @@ import {
  *   onSort: (sort: GridSort) => void,
  * }} GridActions
  */
+
+// The top cards already show every call of a run this small, so the grid would only repeat them.
+const TOP_CARD_COUNT = 4;
 
 /** @type {Record<GridState, string>} */
 const CHIP_LABELS = {
@@ -235,6 +244,7 @@ export function selectGridModel(view) {
     squares,
     finished: view.state.finishedAt !== null,
     winnerLabel: chipLabel(view, "winner"),
+    hidden: view.state.callOrder.length <= TOP_CARD_COUNT,
   };
 }
 
@@ -493,6 +503,7 @@ export function createGrid(card, actions) {
 
   /** @param {GridModel} model */
   function update(model) {
+    card.hidden = model.hidden;
     liveBar.hidden = model.finished;
     finishedBar.hidden = model.finished === false;
     winnerLabel.textContent = model.winnerLabel;

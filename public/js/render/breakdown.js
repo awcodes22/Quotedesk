@@ -100,7 +100,7 @@ function buildBookedTile(summary) {
   }
 
   if (summary.bookingConfirmed === true) {
-    return { swatch: "#12B76A", label: "Confirmed at", value: formatMoney(winner.total), tone: "win", detail: winner.businessName };
+    return { swatch: "#12B76A", label: "Quoted at", value: formatMoney(winner.total), tone: "win", detail: winner.businessName };
   }
 
   // Live calls never book, so the pick is shown as a recommendation.
@@ -258,7 +258,7 @@ function renderOutcome(quote, summary) {
   }
 
   if (quote.outcome === "committed" && bookingConfirmed === true) {
-    return el("span", { class: "outcome tone-win" }, [el("span", { class: "swatch swatch-winner" }), "Confirmed"]);
+    return el("span", { class: "outcome tone-win" }, [el("span", { class: "swatch swatch-winner" }), "Quoted"]);
   }
 
   if (quote.outcome === "committed") {
@@ -565,7 +565,7 @@ function describeMilestone(data, milestone) {
   }
 
   if (summary.bookingConfirmed === true) {
-    return "Confirmed";
+    return "Quoted";
   }
 
   return "Finished";

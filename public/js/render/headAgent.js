@@ -22,6 +22,7 @@ import { findBusinessNoun, findFieldLabels, findKeyTerm, runElapsedMs } from "./
  * @typedef {{ count: number, text: string, alert: boolean }} FooterCount
  * @typedef {{
  *   finished: boolean,
+ *   hasWinner: boolean,
  *   title: string,
  *   clockLabel: string,
  *   clock: string,
@@ -170,6 +171,7 @@ function buildLiveModel(view) {
 
   return {
     finished: false,
+    hasWinner: false,
     title: `Managing ${callText} · ${quoteText} in`,
     clockLabel: clock.clockLabel,
     clock: clock.clock,
@@ -197,7 +199,7 @@ function describeBooking(view, winner) {
   }
 
   if (outcome !== null && outcome.tone === "success") {
-    return `Confirmed ${winner.name} at ${price}`;
+    return `Quoted ${winner.name} at ${price}`;
   }
 
   return `Booking not confirmed with ${winner.name} at ${price}`;
@@ -216,8 +218,8 @@ function buildConfirmationColumn(view) {
   let detail = `Check with the ${noun.singular}`;
 
   if (confirmed) {
-    title = "Confirmed by phone";
-    detail = `${capitalize(noun.singular)} confirmed by phone`;
+    title = "Quoted by phone";
+    detail = `${capitalize(noun.singular)} confirmed the rate by phone`;
   }
 
   if (confirmed && job !== null && job.contact !== undefined) {
@@ -246,6 +248,7 @@ function buildFinishedModel(view) {
   if (winner === undefined) {
     return {
       finished: true,
+      hasWinner: false,
       title: "No quotes came in",
       clockLabel: clock.clockLabel,
       clock: clock.clock,
@@ -269,6 +272,7 @@ function buildFinishedModel(view) {
 
   return {
     finished: true,
+    hasWinner: true,
     title: describeBooking(view, winner),
     clockLabel: clock.clockLabel,
     clock: clock.clock,
@@ -337,11 +341,12 @@ function renderCounts(counts) {
 }
 
 /**
- * @param {boolean} finished
+ * The green check means a winner was picked, so a run without one keeps the neutral agent icon.
+ * @param {HeadAgentModel} model
  * @returns {Element}
  */
-function renderAgentIcon(finished) {
-  if (finished) {
+function renderAgentIcon(model) {
+  if (model.finished && model.hasWinner) {
     return el("span", { class: "icon-square" }, [icon("check", 18, "var(--win)")]);
   }
 
@@ -378,7 +383,7 @@ export function createHeadAgent(card) {
   /** @param {HeadAgentModel} model */
   function update(model) {
     clear(iconSlot);
-    iconSlot.appendChild(renderAgentIcon(model.finished));
+    iconSlot.appendChild(renderAgentIcon(model));
     title.textContent = model.title;
     clockLabel.textContent = model.clockLabel;
     clock.textContent = model.clock;
