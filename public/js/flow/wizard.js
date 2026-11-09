@@ -590,7 +590,7 @@ async function startCalls() {
     return readError(result.body, "Could not start the calls.");
   }
 
-  window.location.assign(`/runs/${encodeURIComponent(String(result.body.runId))}`);
+  window.location.assign(`/run/${encodeURIComponent(String(result.body.runId))}`);
   return null;
 }
 
@@ -651,7 +651,7 @@ async function startTestCall(testNumber, testCallMode) {
     return readError(result.body, "Could not start the test call.");
   }
 
-  window.location.assign(`/runs/${encodeURIComponent(String(result.body.runId))}`);
+  window.location.assign(`/run/${encodeURIComponent(String(result.body.runId))}`);
   return null;
 }
 

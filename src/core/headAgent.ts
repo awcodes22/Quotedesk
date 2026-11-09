@@ -155,6 +155,15 @@ export class HeadAgent {
     return { ok: true, quote };
   }
 
+  // Decides now with the quotes so far, so no more calls are placed.
+  stop(): void {
+    if (this.decision !== undefined) {
+      return;
+    }
+
+    this.finish("stopped");
+  }
+
   callEnded(callId: string): void {
     if (this.decision !== undefined) {
       return;

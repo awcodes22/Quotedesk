@@ -10,6 +10,7 @@ import type {
 } from "express";
 import { z } from "zod";
 import type { AgentEvent } from "./core/events";
+import { stopRun } from "./core/run";
 import type { RunOptions } from "./core/run";
 import { getIndustry } from "./industries/index";
 import { listAllJobs } from "./jobs";
@@ -336,7 +337,25 @@ function buildApiRouter(options: AppOptions): Router {
   router.get("/runs", handleListRuns);
   router.post("/runs", handleStartRun);
   router.get("/runs/:id/events", handleRunEvents);
+  function handleStopRun(request: Request, response: Response): void {
+    const runId = readRunId(request, response);
+
+    if (runId === undefined) {
+      return;
+    }
+
+    const result = stopRun(runId);
+
+    if (result === "not-running") {
+      sendError(response, 404, "That run isn't going right now.");
+      return;
+    }
+
+    sendJson(response, 200, { result });
+  }
+
   router.get("/runs/:id/summary", handleRunSummary);
+  router.post("/runs/:id/stop", handleStopRun);
   router.get("/runs/:id/calls/:callId/audio", handleCallAudio);
   return router;
 }
@@ -398,8 +417,10 @@ export function createApp(options: AppOptions): Express {
   app.use("/api", buildApiRouter(options));
   app.get("/", servePage(options.publicDirectory, "home.html"));
   app.get("/new", servePage(options.publicDirectory, "new.html"));
-  // The job-based dashboard stays reachable for Demo and Chats runs.
-  app.get("/demo", servePage(options.publicDirectory, "index.html"));
+  app.get("/demo", servePage(options.publicDirectory, "demo.html"));
+  app.get("/run/:id", servePage(options.publicDirectory, "run.html"));
+  // The old job-based dashboard, kept only as a fallback.
+  app.get("/demo/legacy", servePage(options.publicDirectory, "index.html"));
   app.get("/runs/:id", servePage(options.publicDirectory, "index.html"));
   app.get(
     "/runs/:id/breakdown",

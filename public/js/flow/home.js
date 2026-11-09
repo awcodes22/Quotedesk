@@ -71,7 +71,7 @@ async function startTestCall(testNumber) {
       return message;
     }
 
-    window.location.assign(`/runs/${encodeURIComponent(String(result.body.runId))}`);
+    window.location.assign(`/run/${encodeURIComponent(String(result.body.runId))}`);
     return null;
   } catch (error) {
     return "Could not reach the server.";
@@ -214,7 +214,7 @@ async function showPastQuotes(card) {
       }
 
       return el("li", {}, [
-        el("a", { href: `/runs/${encodeURIComponent(run.runId)}` }, [
+        el("a", { href: `/run/${encodeURIComponent(run.runId)}` }, [
           el("strong", {}, [run.title]),
           el("span", { class: "muted" }, [`${mode} · ${formatWhen(run.startedAt)}`]),
         ]),

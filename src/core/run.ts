@@ -56,6 +56,25 @@ type DecisionSignal = {
 };
 
 let runInProgress = false;
+// The run that is going now, so Stop calls can reach its head agent.
+let activeRun: { runId: string; agent: HeadAgent } | undefined = undefined;
+
+export type StopResult = "stopped" | "not-running" | "already-decided";
+
+// The head agent decides now with the quotes it has. Calls still waiting are never placed,
+// and calls on the line get the usual close; a live phone call already ringing ends on its own.
+export function stopRun(runId: string): StopResult {
+  if (activeRun === undefined || activeRun.runId !== runId) {
+    return "not-running";
+  }
+
+  if (activeRun.agent.result !== undefined) {
+    return "already-decided";
+  }
+
+  activeRun.agent.stop();
+  return "stopped";
+}
 
 export function isRunning(): boolean {
   return runInProgress;
@@ -510,6 +529,7 @@ async function executeRun(
     provider.recommendsOnly === true,
   );
   const run = { runId, job, industry, provider, agent, liveCalls };
+  activeRun = { runId, agent };
 
   agent.start();
 
@@ -564,5 +584,6 @@ export async function runJob(
     return await executeRun(job, industry, provider, businesses, options);
   } finally {
     runInProgress = false;
+    activeRun = undefined;
   }
 }

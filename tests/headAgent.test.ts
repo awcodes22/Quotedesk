@@ -407,3 +407,35 @@ describe("HeadAgent", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe("HeadAgent.stop", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("decides on the quotes it has, with the reason stopped", () => {
+    const { agent, onDecision } = buildAgent(3, defaultOptions);
+
+    agent.report("a", "business-a", { total: 300 });
+    agent.report("b", "business-b", { total: 250 });
+    agent.stop();
+
+    expect(agent.result).toMatchObject({ kind: "commit", reason: "stopped" });
+    expect(onDecision).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing once a decision is made", () => {
+    const { agent, onDecision } = buildAgent(1, defaultOptions);
+
+    agent.report("a", "business-a", { total: 100 });
+    vi.advanceTimersByTime(1_000);
+    agent.stop();
+
+    expect(agent.result).toMatchObject({ reason: "all-settled" });
+    expect(onDecision).toHaveBeenCalledTimes(1);
+  });
+});

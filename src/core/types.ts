@@ -10,7 +10,8 @@ export type Quote = {
   receivedAt: number;
 };
 
-export type DecisionReason = "all-settled" | "window" | "timeout";
+// "stopped" is the user pressing Stop calls: the head agent decides with what it has.
+export type DecisionReason = "all-settled" | "window" | "timeout" | "stopped";
 
 export type DecisionDeadline = {
   deadlineAt: number;

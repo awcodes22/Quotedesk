@@ -1,7 +1,7 @@
 import type { IndustryConfig, Job, QuoteFields, SimBusiness } from "./core/types";
 
-// The live grid shows 20 squares per row and six rows fit on one screen.
-export const MAX_SCALE = 120;
+// The run page fits about 20 small squares per row, so 200 calls is ten rows.
+export const MAX_SCALE = 200;
 
 const NO_ANSWER_SHARE = 0.08;
 const NEVER_QUOTES_SHARE = 0.25;
