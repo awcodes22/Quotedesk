@@ -7,7 +7,7 @@ import {
   initials,
   labelFromKey,
 } from "../format.js";
-import { selectGettingThrough, selectOutcomeLabel, selectRanking } from "../state.js";
+import { isSelfTestCall, selectGettingThrough, selectOutcomeLabel, selectRanking } from "../state.js";
 import {
   callElapsedMs,
   describeCallStatus,
@@ -27,7 +27,7 @@ import {
  * @typedef {"text"} TranscriptMode
  *
  * @typedef {{ name: string, initials: string, subtitle: string, status: StatusText, meta: string }} CallCardModel
- * @typedef {{ label: string, value: string | null }} QuoteFieldModel
+ * @typedef {{ label: string, value: string | null, missing: string }} QuoteFieldModel
  * @typedef {{
  *   heading: string,
  *   rank: string,
@@ -36,6 +36,7 @@ import {
  *   gapTone: "win" | "alert" | "muted",
  *   fields: QuoteFieldModel[],
  *   notes: string[],
+ *   showAllNotes: boolean,
  * }} QuoteCardModel
  * @typedef {{ kind: "price" | "lower" | "note", text: string }} MarkModel
  * @typedef {{
@@ -181,6 +182,42 @@ function formatFieldValue(value) {
 }
 
 /**
+ * On a test call the person answering is the user; on a real live call it is whoever staffs the desk.
+ * @param {View} view
+ * @param {CallState} call
+ * @returns {string}
+ */
+export function businessSpeakerName(view, call) {
+  if (isLiveRun(view) && isSelfTestCall(call)) {
+    return "You";
+  }
+
+  if (isLiveRun(view)) {
+    return "Front desk";
+  }
+
+  return call.name;
+}
+
+/**
+ * While the call is on, a missing field may still come up. Once it has ended, a call with a price
+ * simply never mentioned the field, and a call without one never got far enough to ask.
+ * @param {CallState} call
+ * @returns {string}
+ */
+export function describeMissingField(call) {
+  if (call.endedAt === null) {
+    return "Not asked yet";
+  }
+
+  if (call.quote !== null) {
+    return "Not mentioned";
+  }
+
+  return "Not asked";
+}
+
+/**
  * Total first, then every field the industry names, answered or not.
  * @param {View} view
  * @param {CallState} call
@@ -189,16 +226,17 @@ function formatFieldValue(value) {
 function buildQuoteFields(view, call) {
   let fields = /** @type {Record<string, unknown>} */ ({});
   let total = null;
+  const missing = describeMissingField(call);
 
   if (call.quote !== null) {
     fields = call.quote.fields;
     total = formatMoney(call.quote.total);
   }
 
-  const models = [{ label: "Total", value: total }];
+  const models = [{ label: "Total", value: total, missing }];
 
   for (const key of Object.keys(findFieldLabels(view))) {
-    models.push({ label: labelFromKey(key), value: formatFieldValue(fields[key]) });
+    models.push({ label: labelFromKey(key), value: formatFieldValue(fields[key]), missing });
   }
 
   return models;
@@ -259,6 +297,7 @@ function buildQuoteCard(view, call, ranking) {
     ...describeGap(ranked, view.state.decision !== null),
     fields: buildQuoteFields(view, call),
     notes: call.notes,
+    showAllNotes: isLiveRun(view),
   };
 }
 
@@ -273,7 +312,7 @@ function describeLiveAfterDecision(view, call, ranked) {
   const decision = view.state.decision;
 
   if (decision !== null && decision.kind === "commit" && decision.winner.callId === call.callId) {
-    return "Lowest total, so it's the best quote. Nothing was booked.";
+    return "Lowest total, so it's the best quote.";
   }
 
   if (ranked !== undefined) {
@@ -338,7 +377,7 @@ function describeStanding(view, call, ranking) {
   }
 
   if (ranked !== undefined && ranked.rank === 1) {
-    return `Leading. Booked if nothing beats ${formatMoney(ranked.total)}.`;
+    return `Leading. Wins if nothing beats ${formatMoney(ranked.total)}.`;
   }
 
   if (ranked !== undefined && ranked.rank <= TOP_COUNT) {
@@ -433,7 +472,7 @@ function buildTranscript(view, call) {
     let name = AGENT_NAME;
 
     if (turn.speaker === "business") {
-      name = call.name;
+      name = businessSpeakerName(view, call);
     }
 
     return {
@@ -532,7 +571,7 @@ function renderQuoteField(field) {
   if (field.value === null) {
     return el("div", { class: "quote-field" }, [
       el("span", { class: "quote-field-label" }, [field.label]),
-      el("span", { class: "quote-field-missing" }, ["Not asked yet"]),
+      el("span", { class: "quote-field-missing" }, [field.missing]),
     ]);
   }
 
@@ -541,6 +580,23 @@ function renderQuoteField(field) {
     el("span", { class: "quote-field-value tabular" }, [
       field.value,
       icon("check", 16, "var(--win)"),
+    ]),
+  ]);
+}
+
+/**
+ * A live call's notes all arrive together when it ends and are few, so they fit as a short list.
+ * @param {string[]} notes
+ * @returns {HTMLElement}
+ */
+function renderNoteList(notes) {
+  const items = notes.map((note) => el("li", { class: "quote-note-text" }, [note]));
+
+  return el("div", { class: "quote-note quote-note-list" }, [
+    icon("file-text", 16),
+    el("div", {}, [
+      el("span", { class: "quote-note-label" }, ["Notes"]),
+      el("ul", {}, items),
     ]),
   ]);
 }
@@ -577,6 +633,12 @@ function renderQuoteCard(card, model) {
     ]),
     fields,
   ]);
+
+  if (model.showAllNotes && model.notes.length > 0) {
+    body.appendChild(renderNoteList(model.notes));
+    card.appendChild(body);
+    return;
+  }
 
   // Only the newest note fits next to the transcript; the rest stay in the transcript itself.
   const latestNote = model.notes[model.notes.length - 1];

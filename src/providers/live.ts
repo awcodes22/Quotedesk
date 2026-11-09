@@ -19,6 +19,8 @@ export type LiveLimits = {
   callTimeoutMs: number;
   // Whether the dashboard may ring a number typed in for one test call.
   selfTest?: boolean;
+  // The name the caller gives, shown in the run header as who the quote is for.
+  guestName?: string;
 };
 
 export type LiveProviderOptions = LiveLimits & {

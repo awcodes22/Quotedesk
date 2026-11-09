@@ -489,17 +489,17 @@ describe("live provider", () => {
 });
 
 describe("quote extraction", () => {
-  it("validates the reply and keeps up to four trimmed notes", async () => {
+  it("validates the reply and keeps up to six trimmed notes", async () => {
     const reply = JSON.stringify({
       quote: { total: 398, freeCancellation: false },
-      notes: [" Non-refundable rate. ", "", "Parking is $30 a night.", "a", "b", "c"],
+      notes: [" Non-refundable rate. ", "", "Parking is $30 a night.", "a", "b", "c", "d", "e"],
     });
     const extract = createQuoteExtractor(async () => reply);
 
     const extraction = await extract([{ speaker: "business", text: "398, non-refundable." }], hotels);
 
     expect(extraction.fields).toEqual({ total: 398, freeCancellation: false });
-    expect(extraction.notes).toEqual(["Non-refundable rate.", "Parking is $30 a night.", "a", "b"]);
+    expect(extraction.notes).toEqual(["Non-refundable rate.", "Parking is $30 a night.", "a", "b", "c", "d"]);
   });
 
   it("refuses a quote that breaks the industry's schema", async () => {

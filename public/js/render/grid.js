@@ -45,7 +45,7 @@ import {
 
 /** @type {Record<GridState, string>} */
 const CHIP_LABELS = {
-  winner: "Booked",
+  winner: "Winner",
   quoted: "Quoted",
   talking: "Talking",
   dialing: "Dialing",
@@ -63,7 +63,8 @@ const SQUARE_ICONS = {
   queued: "clock",
   "no-answer": "phone-missed",
   refused: "ban",
-  "never-quoted": "phone-off",
+  // A plain handset: someone picked up and talked, there just wasn't a price.
+  "never-quoted": "phone",
 };
 
 // Live calls are real phone calls that never book and hang up on their own.

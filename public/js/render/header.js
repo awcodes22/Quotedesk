@@ -3,6 +3,7 @@ import { clear, el, icon } from "../dom.js";
 import { formatClock, formatDuration, pluralize } from "../format.js";
 import { ICONS } from "../icons.js";
 import { maskPhone, normalizeNorthAmericanNumber } from "../phone.js";
+import { isSelfTestRun } from "../state.js";
 import { findBusinessNoun, runElapsedMs } from "./view.js";
 
 /**
@@ -37,10 +38,16 @@ function findIconName(name) {
  * @param {string} industryLabel
  * @param {number} callCount
  * @param {JobListing | null} listing
+ * @param {boolean} [selfTestRun] A "Call me to test" run, which rings one person instead of businesses.
  * @returns {RequestField[]}
  */
-export function buildRequestFields(job, industryLabel, callCount, listing) {
+export function buildRequestFields(job, industryLabel, callCount, listing, selfTestRun = false) {
   const noun = findBusinessNoun(listing);
+  let calling = pluralize(callCount, noun.singular, noun.plural);
+
+  if (selfTestRun) {
+    calling = "Test call";
+  }
 
   /** @type {RequestField[]} */
   const fields = [{ icon: "search", label: "Looking for", value: industryLabel }];
@@ -51,19 +58,26 @@ export function buildRequestFields(job, industryLabel, callCount, listing) {
     }
   }
 
-  fields.push({
-    icon: "phone",
-    label: "Calling",
-    value: pluralize(callCount, noun.singular, noun.plural),
-  });
+  fields.push({ icon: "phone", label: "Calling", value: calling });
 
   if (listing !== null) {
     const decideWithin = formatDuration(listing.decideWithinMs);
     fields.push({ icon: "clock", label: "Decide", value: `Within ${decideWithin}` });
   }
 
+  // A live run carries the name the caller gives on the phone, which wins over the job's contact.
+  let guestName = null;
+
   if (job.contact !== undefined) {
-    fields.push({ icon: "user", label: "Booking for", value: job.contact.name });
+    guestName = job.contact.name;
+  }
+
+  if (job.guestName !== undefined) {
+    guestName = job.guestName;
+  }
+
+  if (guestName !== null) {
+    fields.push({ icon: "user", label: "Booking for", value: guestName });
   }
 
   return fields;
@@ -78,7 +92,13 @@ export function selectRunHeaderModel(view) {
   let fields = /** @type {RequestField[]} */ ([]);
 
   if (state.job !== null) {
-    fields = buildRequestFields(state.job, state.industryLabel, state.callOrder.length, view.listing);
+    fields = buildRequestFields(
+      state.job,
+      state.industryLabel,
+      state.callOrder.length,
+      view.listing,
+      isSelfTestRun(state),
+    );
   }
 
   return {

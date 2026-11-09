@@ -96,11 +96,11 @@ function buildBookedTile(summary) {
   const winner = summary.winner;
 
   if (winner === null) {
-    return { swatch: "#12B76A", label: "Booked at", value: EMPTY_VALUE, tone: "muted", detail: "No quotes came in" };
+    return { swatch: "#12B76A", label: "Best quote", value: EMPTY_VALUE, tone: "muted", detail: "No quotes came in" };
   }
 
   if (summary.bookingConfirmed === true) {
-    return { swatch: "#12B76A", label: "Booked at", value: formatMoney(winner.total), tone: "win", detail: winner.businessName };
+    return { swatch: "#12B76A", label: "Confirmed at", value: formatMoney(winner.total), tone: "win", detail: winner.businessName };
   }
 
   // Live calls never book, so the pick is shown as a recommendation.
@@ -258,7 +258,7 @@ function renderOutcome(quote, summary) {
   }
 
   if (quote.outcome === "committed" && bookingConfirmed === true) {
-    return el("span", { class: "outcome tone-win" }, [el("span", { class: "swatch swatch-winner" }), "Booked"]);
+    return el("span", { class: "outcome tone-win" }, [el("span", { class: "swatch swatch-winner" }), "Confirmed"]);
   }
 
   if (quote.outcome === "committed") {
@@ -450,7 +450,7 @@ function renderPriceBars(row, source) {
 
   return [
     renderBarRow(source, row.reference, listedBar),
-    renderBarRow("Booked on the phone", row.quoted, bookedBar),
+    renderBarRow("Quoted on the phone", row.quoted, bookedBar),
   ];
 }
 
@@ -565,7 +565,7 @@ function describeMilestone(data, milestone) {
   }
 
   if (summary.bookingConfirmed === true) {
-    return "Booked";
+    return "Confirmed";
   }
 
   return "Finished";

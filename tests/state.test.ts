@@ -172,7 +172,7 @@ afterAll(() => {
 });
 
 describe("runReducer on a recorded fake run", () => {
-  it("ends with the run done and Queen West booked at 398", () => {
+  it("ends with the run done and Queen West confirmed at 398", () => {
     const state = reduceAll(recordedEvents);
 
     expect(selectRunStatus(state)).toBe("done");
@@ -187,7 +187,7 @@ describe("runReducer on a recorded fake run", () => {
       gapToLeader: 0,
     });
     expect(selectOutcomeLabel(state)).toEqual({
-      text: "Booked",
+      text: "Confirmed",
       tone: "success",
     });
   });
@@ -331,14 +331,14 @@ describe("outcome label", () => {
     });
   });
 
-  it("shows Booked when the winner's call ends normally", () => {
+  it("shows Confirmed when the winner's call ends normally", () => {
     const events = [
       ...eventsThroughCommit(),
       winnerStatusEvent("ended"),
     ];
 
     expect(selectOutcomeLabel(reduceAll(events))).toEqual({
-      text: "Booked",
+      text: "Confirmed",
       tone: "success",
     });
   });
@@ -403,7 +403,7 @@ describe("grid states", () => {
     ];
   }
 
-  it("follows the call status before the decision", () => {
+  it("follows the call status before the decision, with an answered call that ended unpriced as never quoted", () => {
     const state = reduceAll(buildOpenRun());
 
     const gridStates = selectCalls(state).map((call) => selectGridState(state, call));
@@ -413,7 +413,7 @@ describe("grid states", () => {
       "dialing",
       "talking",
       "quoted",
-      "refused",
+      "never-quoted",
       "no-answer",
     ]);
   });

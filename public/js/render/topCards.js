@@ -1,7 +1,13 @@
 // @ts-check
 import { clear, el } from "../dom.js";
 import { formatClock, formatMoney, formatSignedMoney, initials } from "../format.js";
-import { selectOutcomeLabel, selectTopFour } from "../state.js";
+import {
+  endedWithoutPrice,
+  isNoAnswer,
+  selectCalls,
+  selectOutcomeLabel,
+  selectTopFour,
+} from "../state.js";
 import {
   callElapsedMs,
   describeCallStatus,
@@ -14,6 +20,7 @@ import {
  * @typedef {import("./view.js").View} View
  * @typedef {import("./view.js").KeyTerm} KeyTerm
  * @typedef {import("../state.js").RankedQuote} RankedQuote
+ * @typedef {import("../state.js").CallState} CallState
  *
  * @typedef {{ text: string, tone: "win" | "warning" | "muted" | "plain" }} CardStatus
  * @typedef {{
@@ -30,11 +37,27 @@ import {
  *   isLeader: boolean,
  *   faded: boolean,
  *   selected: boolean,
+ *   notes: string[],
  * }} TopCardModel
- * @typedef {{ cards: TopCardModel[], finished: boolean }} TopCardsModel
+ * @typedef {{
+ *   callId: string,
+ *   name: string,
+ *   initials: string,
+ *   status: string,
+ *   selected: boolean,
+ *   notes: string[],
+ * }} PendingCardModel
+ * @typedef {{
+ *   cards: TopCardModel[],
+ *   pending: PendingCardModel[],
+ *   slotCount: number,
+ *   finished: boolean,
+ * }} TopCardsModel
  */
 
 const SLOT_COUNT = 4;
+// Matches the row's 12px gap, so a short row keeps the same card width as a full one.
+const SLOT_WIDTH = "calc((100% - 36px) / 4)";
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const LEADER_LINE = "#12B76A";
 const OTHER_LINE = "#6CE9A6";
@@ -124,16 +147,95 @@ function buildCard(view, quote) {
     isLeader,
     faded: view.state.finishedAt !== null && isLeader === false,
     selected: view.selectedCallId === quote.callId,
+    notes: findNotes(view, quote.callId),
   };
 }
 
 /**
  * @param {View} view
+ * @param {string} callId
+ * @returns {string[]}
+ */
+function findNotes(view, callId) {
+  const call = view.state.calls[callId];
+
+  if (call === undefined) {
+    return [];
+  }
+
+  return call.notes;
+}
+
+/**
+ * @param {View} view
+ * @param {CallState} call
+ * @returns {string}
+ */
+function describePendingCall(view, call) {
+  if (isNoAnswer(call)) {
+    return "No answer";
+  }
+
+  if (endedWithoutPrice(call)) {
+    return "Ended without a price";
+  }
+
+  const statusText = describeCallStatus(call.status, isLiveRun(view)).text;
+
+  if (call.dialedAt === null || call.endedAt !== null) {
+    return statusText;
+  }
+
+  return `${statusText} ${formatClock(callElapsedMs(call, view.now))}`;
+}
+
+/**
+ * @param {View} view
+ * @param {CallState} call
+ * @returns {PendingCardModel}
+ */
+function buildPendingCard(view, call) {
+  return {
+    callId: call.callId,
+    name: call.name,
+    initials: initials(call.name),
+    status: describePendingCall(view, call),
+    selected: view.selectedCallId === call.callId,
+    notes: call.notes,
+  };
+}
+
+/**
+ * With fewer calls than slots, every call gets its own card, quoted or not, and no slot sits empty.
+ * @param {View} view
  * @returns {TopCardsModel}
  */
 export function selectTopCardsModel(view) {
   const cards = selectTopFour(view.state).map((quote) => buildCard(view, quote));
-  return { cards, finished: view.state.finishedAt !== null };
+  const callCount = view.state.callOrder.length;
+  const slotCount = Math.min(SLOT_COUNT, callCount);
+  /** @type {PendingCardModel[]} */
+  let pending = [];
+
+  if (callCount < SLOT_COUNT) {
+    const unquoted = selectCalls(view.state).filter((call) => call.quote === null);
+    pending = unquoted.map((call) => buildPendingCard(view, call));
+  }
+
+  return { cards, pending, slotCount, finished: view.state.finishedAt !== null };
+}
+
+/**
+ * @param {string[]} notes
+ * @returns {HTMLElement | null}
+ */
+function renderNotesLine(notes) {
+  if (notes.length === 0) {
+    return null;
+  }
+
+  const text = notes.join(" · ");
+  return el("div", { class: "top-card-notes", title: text }, [text]);
 }
 
 /**
@@ -211,7 +313,36 @@ function renderCard(card, onSelect) {
       el("span", { class: "top-card-rank" }, [card.rank]),
     ]),
     renderPriceLine(card),
+    renderNotesLine(card.notes),
     renderBottomLine(card),
+  ]);
+
+  button.addEventListener("click", () => onSelect(card.callId));
+  return button;
+}
+
+/**
+ * A call that hasn't quoted yet, shown when the run has fewer calls than slots.
+ * @param {PendingCardModel} card
+ * @param {(callId: string) => void} onSelect
+ * @returns {HTMLElement}
+ */
+function renderPendingCard(card, onSelect) {
+  let className = "card top-card top-card-pending";
+
+  if (card.selected) {
+    className += " is-selected";
+  }
+
+  const button = el("button", { class: className, type: "button" }, [
+    el("div", { class: "top-card-head" }, [
+      el("span", { class: "avatar" }, [card.initials]),
+      el("span", { class: "top-card-name" }, [card.name]),
+    ]),
+    renderNotesLine(card.notes),
+    el("div", { class: "top-card-bottom" }, [
+      el("span", { class: "top-card-status tone-plain" }, [card.status]),
+    ]),
   ]);
 
   button.addEventListener("click", () => onSelect(card.callId));
@@ -315,16 +446,25 @@ export function createTopCards(container, onSelect) {
   /** @param {TopCardsModel} model */
   function update(model) {
     clear(row);
-    cardCount = model.cards.length;
+    cardCount = model.cards.length + model.pending.length;
     finished = model.finished;
+    row.style.gridTemplateColumns = "";
 
-    for (let index = 0; index < SLOT_COUNT; index += 1) {
+    // A short row keeps full-size cards and sits centred under the head agent.
+    if (model.slotCount < SLOT_COUNT) {
+      row.style.gridTemplateColumns = `repeat(${model.slotCount}, ${SLOT_WIDTH})`;
+    }
+
+    for (let index = 0; index < model.slotCount; index += 1) {
       const card = model.cards[index];
+      const pending = model.pending[index - model.cards.length];
 
-      if (card === undefined) {
-        row.appendChild(renderEmptySlot());
-      } else {
+      if (card !== undefined) {
         row.appendChild(renderCard(card, onSelect));
+      } else if (pending !== undefined) {
+        row.appendChild(renderPendingCard(pending, onSelect));
+      } else {
+        row.appendChild(renderEmptySlot());
       }
     }
 

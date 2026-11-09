@@ -525,6 +525,11 @@ p {
   color: var(--no-answer);
 }
 
+.agent-count-zero,
+.agent-count-zero strong {
+  color: var(--text-3);
+}
+
 .agent-progress {
   position: absolute;
   right: 0;
@@ -559,6 +564,7 @@ p {
 .top-cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  justify-content: center;
   gap: 12px;
 }
 
@@ -1158,6 +1164,28 @@ p {
 .quote-note-text {
   color: var(--ink);
   font-weight: 500;
+}
+
+.quote-note-list > svg {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.quote-note-list ul {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+
+.top-card-notes {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-card-pending {
+  justify-content: space-between;
 }
 
 .panel-agent {

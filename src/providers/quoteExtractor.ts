@@ -19,12 +19,40 @@ export type QuoteExtractor = (
 ) => Promise<Extraction>;
 
 const COMPLETION_TIMEOUT_MS = 30_000;
-const MAX_NOTES = 4;
+const MAX_NOTES = 6;
+
+// A client always wants these, so each gets its own slot instead of hoping a free note covers it.
+// The order here is the order the notes are shown in.
+export const NOTE_TOPICS = {
+  breakfast: "whether breakfast is included, or what it costs",
+  cancellation: "the cancellation terms, or that the rate is non-refundable",
+  discounts: "any discount or lower rate the business offered or applied",
+  extraFees: "any extra fee, such as parking, resort or deposit fees, or taxes on top",
+} as const;
+
+type NoteTopic = keyof typeof NOTE_TOPICS;
+
+const topicNoteSchema = z.string().nullable().optional();
 
 const envelopeSchema = z.object({
   quote: z.unknown().nullable(),
+  topics: z
+    .object({
+      breakfast: topicNoteSchema,
+      cancellation: topicNoteSchema,
+      discounts: topicNoteSchema,
+      extraFees: topicNoteSchema,
+    })
+    .optional(),
   notes: z.array(z.string()),
 });
+
+type TopicNotes = NonNullable<z.infer<typeof envelopeSchema>["topics"]>;
+
+function describeTopics(): string {
+  const lines = Object.entries(NOTE_TOPICS).map(([key, meaning]) => `- ${key}: ${meaning}`);
+  return lines.join("\n");
+}
 
 function buildInstructions(industry: IndustryConfig): string {
   return [
@@ -33,8 +61,10 @@ function buildInstructions(industry: IndustryConfig): string {
     "Set quote to the final total the business confirmed for the whole request, after any discount the business agreed to.",
     "Only fill a field the business actually stated. Leave out anything it did not say.",
     "If the business never gave a price, set quote to null.",
-    `Add up to ${MAX_NOTES} short notes about what the business said that a client would want to know, such as discounts, extra fees, cancellation terms or breakfast.`,
-    "Each note is one short sentence. Never note what the caller said.",
+    "Fill each of these topics with one short sentence when the business mentioned it, and null when it did not:",
+    describeTopics(),
+    "Never guess or invent a topic. If the transcript doesn't mention it, it is null.",
+    "Put anything else a client would want to know in notes, as short sentences. Never note what the caller said.",
   ].join("\n");
 }
 
@@ -58,13 +88,25 @@ function buildResponseSchema(industry: IndustryConfig): Record<string, unknown> 
   // The response format nests this schema, where the key isn't expected.
   delete quoteSchema.$schema;
 
+  const topicProperties: Record<string, unknown> = {};
+
+  for (const topic of Object.keys(NOTE_TOPICS)) {
+    topicProperties[topic] = { type: ["string", "null"] };
+  }
+
   return {
     type: "object",
     properties: {
       quote: { anyOf: [quoteSchema, { type: "null" }] },
+      topics: {
+        type: "object",
+        properties: topicProperties,
+        required: Object.keys(NOTE_TOPICS),
+        additionalProperties: false,
+      },
       notes: { type: "array", items: { type: "string" } },
     },
-    required: ["quote", "notes"],
+    required: ["quote", "topics", "notes"],
     additionalProperties: false,
   };
 }
@@ -84,9 +126,35 @@ function parseFields(raw: unknown, industry: IndustryConfig): QuoteFields | null
   return result.data;
 }
 
-function cleanNotes(notes: string[]): string[] {
-  const trimmed = notes.map((note) => note.trim());
-  const kept = trimmed.filter((note) => note !== "");
+function readTopicNotes(topics: TopicNotes | undefined): string[] {
+  const notes: string[] = [];
+
+  if (topics === undefined) {
+    return notes;
+  }
+
+  for (const topic of Object.keys(NOTE_TOPICS) as NoteTopic[]) {
+    const note = topics[topic];
+
+    if (typeof note === "string") {
+      notes.push(note);
+    }
+  }
+
+  return notes;
+}
+
+// Topic notes come first so they are never the ones cut by the limit.
+function cleanNotes(topicNotes: string[], otherNotes: string[]): string[] {
+  const trimmed = [...topicNotes, ...otherNotes].map((note) => note.trim());
+  const kept: string[] = [];
+
+  for (const note of trimmed) {
+    if (note !== "" && kept.includes(note) === false) {
+      kept.push(note);
+    }
+  }
+
   return kept.slice(0, MAX_NOTES);
 }
 
@@ -109,7 +177,7 @@ export function createQuoteExtractor(complete: JsonCompletion): QuoteExtractor {
 
     return {
       fields: parseFields(envelope.quote, industry),
-      notes: cleanNotes(envelope.notes),
+      notes: cleanNotes(readTopicNotes(envelope.topics), envelope.notes),
     };
   }
 

@@ -39,7 +39,7 @@ function describeConfirmedBooking(view, winner) {
   }
 
   return [
-    { text: `Booked ${winner.name} at `, bold: false },
+    { text: `Confirmed ${winner.name} at `, bold: false },
     { text: formatMoney(winner.total), bold: true },
     { text: `${termText}.${confirmation}`, bold: false },
   ];
@@ -62,7 +62,7 @@ function describeBestQuote(view, winner) {
   return [
     { text: `Best quote: ${winner.name} at `, bold: false },
     { text: formatMoney(winner.total), bold: true },
-    { text: `${termText}. Nothing was booked.`, bold: false },
+    { text: `${termText}.`, bold: false },
   ];
 }
 
@@ -76,7 +76,7 @@ function buildSentence(view) {
   const noun = findBusinessNoun(view.listing);
 
   if (winner === undefined) {
-    return [{ text: "No quotes came in, so nothing was booked.", bold: false }];
+    return [{ text: "No quotes came in.", bold: false }];
   }
 
   if (isLiveProvider(view.state.provider)) {

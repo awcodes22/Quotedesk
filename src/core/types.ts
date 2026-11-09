@@ -62,6 +62,8 @@ export type Job = {
   details?: JobDetail[];
   stay?: Stay;
   liveBusinesses?: LiveBusiness[];
+  // Set by the server for live runs from LIVE_GUEST_NAME, the name the caller gives.
+  guestName?: string;
 };
 
 export type PriceCheckRow = {

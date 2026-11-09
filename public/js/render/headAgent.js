@@ -2,7 +2,9 @@
 import { clear, el, icon } from "../dom.js";
 import { capitalize, formatClock, formatMoney, pluralize } from "../format.js";
 import {
+  endedWithoutPrice,
   isLiveProvider,
+  isNoAnswer,
   selectCalls,
   selectHeadAgentPlan,
   selectOutcomeLabel,
@@ -40,9 +42,9 @@ function countLiveLines(calls) {
   let queued = 0;
 
   for (const call of calls) {
-    if (call.status === "failed") {
+    if (isNoAnswer(call)) {
       noAnswer += 1;
-    } else if (call.status === "ended" || call.status === "skipped") {
+    } else if (call.status === "ended" || call.status === "skipped" || call.status === "failed") {
       ended += 1;
     } else if (call.status === "queued") {
       queued += 1;
@@ -53,7 +55,7 @@ function countLiveLines(calls) {
 
   const counts = [
     { count: live, text: "live", alert: false },
-    { count: noAnswer, text: "no answer", alert: true },
+    { count: noAnswer, text: "no answer", alert: noAnswer > 0 },
     { count: ended, text: "ended", alert: false },
   ];
 
@@ -68,15 +70,19 @@ function countLiveLines(calls) {
  * @param {View} view
  * @returns {FooterCount[]}
  */
-function countFinishedLines(view) {
+export function countFinishedLines(view) {
   const calls = selectCalls(view.state);
-  const closed = calls.filter((call) => call.command === "close" && call.commandDelivered === true);
-  const noAnswer = calls.filter((call) => call.status === "failed");
+  // A call that was answered and hung up without a price ended politely too, just without a quote.
+  const closed = calls.filter((call) => {
+    const closedByAgent = call.command === "close" && call.commandDelivered === true;
+    return closedByAgent || endedWithoutPrice(call);
+  });
+  const noAnswer = calls.filter(isNoAnswer);
 
   return [
     { count: selectStats(view.state).quoteCount, text: "quotes", alert: false },
     { count: closed.length, text: "closed politely", alert: false },
-    { count: noAnswer.length, text: "no answer", alert: true },
+    { count: noAnswer.length, text: "no answer", alert: noAnswer.length > 0 },
   ];
 }
 
@@ -191,7 +197,7 @@ function describeBooking(view, winner) {
   }
 
   if (outcome !== null && outcome.tone === "success") {
-    return `Booked ${winner.name} at ${price}`;
+    return `Confirmed ${winner.name} at ${price}`;
   }
 
   return `Booking not confirmed with ${winner.name} at ${price}`;
@@ -210,7 +216,7 @@ function buildConfirmationColumn(view) {
   let detail = `Check with the ${noun.singular}`;
 
   if (confirmed) {
-    title = "Booked by phone";
+    title = "Confirmed by phone";
     detail = `${capitalize(noun.singular)} confirmed by phone`;
   }
 
@@ -219,7 +225,7 @@ function buildConfirmationColumn(view) {
   }
 
   if (isLiveProvider(view.state.provider)) {
-    title = "Not booked";
+    title = "Recommendation only";
     detail = "Live calls only gather quotes";
   }
 
@@ -310,7 +316,12 @@ function renderCounts(counts) {
   for (const item of counts) {
     let className = "agent-count";
 
-    if (item.alert) {
+    // Nothing to report reads as neutral gray, so a zero never looks like a problem.
+    if (item.count === 0) {
+      className = "agent-count agent-count-zero";
+    }
+
+    if (item.alert && item.count > 0) {
       className = "agent-count agent-count-alert";
     }
 

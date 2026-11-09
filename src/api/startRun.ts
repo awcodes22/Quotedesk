@@ -213,9 +213,15 @@ function prepareLiveRun(
 
   const industry = getIndustry(job.industryId);
   const timeoutMs = liveRunTimeoutMs(limits.callTimeoutMs, calls.length);
+  const liveJob: Job = { ...withoutPhoneNumbers(job), businessIds: undefined };
+
+  // The caller gives LIVE_GUEST_NAME on the phone, so that is who the quote is for, not the job's contact.
+  if (limits.guestName !== undefined) {
+    liveJob.guestName = limits.guestName;
+  }
 
   return {
-    job: { ...withoutPhoneNumbers(job), businessIds: undefined },
+    job: liveJob,
     industry: { ...industry, simBusinesses: calls },
     runOptions: {
       ...settings.runOptions,

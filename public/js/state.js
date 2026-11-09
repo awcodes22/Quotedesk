@@ -554,6 +554,26 @@ export function isLiveProvider(provider) {
   return provider === "live";
 }
 
+// The server gives the one call of a "Call me to test" run this business id.
+const SELF_TEST_BUSINESS_ID = "test-call";
+
+/**
+ * @param {CallState} call
+ * @returns {boolean}
+ */
+export function isSelfTestCall(call) {
+  return call.businessId === SELF_TEST_BUSINESS_ID;
+}
+
+/**
+ * @param {RunState} state
+ * @returns {boolean}
+ */
+export function isSelfTestRun(state) {
+  const calls = selectCalls(state);
+  return isLiveProvider(state.provider) && calls.length === 1 && calls.every(isSelfTestCall);
+}
+
 /**
  * @param {RunState} state
  * @returns {string | null}
@@ -569,12 +589,35 @@ function findWinnerCallId(state) {
 }
 
 /**
+ * No answer means nobody ever picked up. A call that failed after it was answered had a conversation.
+ * @param {CallState} call
+ * @returns {boolean}
+ */
+export function isNoAnswer(call) {
+  return call.status === "failed" && call.answeredAt === null;
+}
+
+/**
+ * Someone picked up and talked, but the call ended without a price.
+ * @param {CallState} call
+ * @returns {boolean}
+ */
+export function endedWithoutPrice(call) {
+  const lineClosed = call.status === "ended" || call.status === "failed";
+  return lineClosed && call.answeredAt !== null && call.quote === null;
+}
+
+/**
  * @param {CallState} call
  * @returns {GridState}
  */
 function findOpenGridState(call) {
   if (call.quote !== null) {
     return "quoted";
+  }
+
+  if (endedWithoutPrice(call)) {
+    return "never-quoted";
   }
 
   if (call.status === "queued") {
@@ -598,7 +641,7 @@ function findOpenGridState(call) {
  * @returns {GridState}
  */
 export function selectGridState(state, call) {
-  if (call.status === "failed") {
+  if (isNoAnswer(call)) {
     return "no-answer";
   }
 
@@ -714,7 +757,7 @@ export function selectStats(state) {
 }
 
 /**
- * Booked only once the winner's call ends normally after hearing the commit.
+ * Confirmed only once the winner's call ends normally after hearing the commit.
  * @param {RunState} state
  * @returns {OutcomeLabel | null}
  */
@@ -743,7 +786,7 @@ export function selectOutcomeLabel(state) {
   }
 
   if (winner.status === "ended") {
-    return { text: "Booked", tone: "success" };
+    return { text: "Confirmed", tone: "success" };
   }
 
   if (winner.status === "failed" || state.finishedAt !== null) {

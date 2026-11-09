@@ -20,6 +20,10 @@ const liveLimits: LiveLimits = {
   selfTest: config.LIVE_SELF_TEST,
 };
 
+if (config.LIVE_GUEST_NAME !== undefined) {
+  liveLimits.guestName = config.LIVE_GUEST_NAME;
+}
+
 const app = createApp({
   jobsDirectory: "data/jobs",
   privateJobsDirectory: PRIVATE_JOBS_DIRECTORY,
