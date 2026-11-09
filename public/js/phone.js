@@ -17,6 +17,20 @@ export function maskPhone(phone) {
 }
 
 /**
+ * Shows a public listing's number the way people read it, such as +1 416-555-0101.
+ * Never used on a private number; those are only ever masked.
+ * @param {string} phone A number in E.164 form, +1 and 10 digits.
+ * @returns {string}
+ */
+export function formatPublicPhone(phone) {
+  if (NORTH_AMERICAN_NUMBER.test(phone) === false) {
+    return phone;
+  }
+
+  return `+1 ${phone.slice(2, 5)}-${phone.slice(5, 8)}-${phone.slice(8)}`;
+}
+
+/**
  * People type numbers with spaces, dashes, dots and brackets, so those are dropped first.
  * Ten digits on their own are taken as North American, so +1 is added.
  * @param {string} input

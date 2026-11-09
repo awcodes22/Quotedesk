@@ -119,6 +119,8 @@ const configSchema = z
     // The ElevenLabs plan allows six calls at once, so the cap can't go higher.
     LIVE_MAX_CALLS: wholeNumber().min(1).max(6).default(6),
     LIVE_CALL_TIMEOUT_MS: wholeNumber().min(1).default(300000),
+    // Without it, hotel search shows sample hotels instead of calling Google Places.
+    GOOGLE_PLACES_API_KEY: optionalText(),
   })
   .superRefine(requireOpenAIValues);
 

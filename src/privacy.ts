@@ -17,6 +17,11 @@ export function maskPhoneNumbers(text: string): string {
   return text.replace(PHONE_PATTERN, maskPhone);
 }
 
+// A hotel's Google Places listing is public, so its phone number stays whole. Only the server
+// builds this field, from Places results; a typed-in test number never goes in one, and free
+// text such as transcripts and errors is still masked everywhere.
+export const PUBLIC_LISTING_KEY = "publicListing";
+
 function maskObject(value: object): object {
   if (Array.isArray(value)) {
     return value.map((item: unknown) => maskStrings(item));
@@ -25,7 +30,11 @@ function maskObject(value: object): object {
   const masked: Record<string, unknown> = {};
 
   for (const [key, item] of Object.entries(value)) {
-    masked[key] = maskStrings(item);
+    if (key === PUBLIC_LISTING_KEY) {
+      masked[key] = item;
+    } else {
+      masked[key] = maskStrings(item);
+    }
   }
 
   return masked;

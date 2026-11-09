@@ -7,6 +7,7 @@ import { createGrid, selectGridModel } from "./render/grid.js";
 import { createGuide, selectGuideModel } from "./render/guide.js";
 import { createHeadAgent, selectHeadAgentModel } from "./render/headAgent.js";
 import { createPickerHeader, createRunHeader, selectRunHeaderModel } from "./render/header.js";
+import { createPlacesFinder } from "./render/places.js";
 import { createStats, selectStatsModel } from "./render/stats.js";
 import { createTopCards, selectTopCardsModel } from "./render/topCards.js";
 import { createTracker, selectTrackerModel } from "./render/tracker.js";
@@ -19,7 +20,7 @@ import { createTracker, selectTrackerModel } from "./render/tracker.js";
  * @typedef {import("./render/view.js").GridFilter} GridFilter
  * @typedef {import("./render/view.js").GridSort} GridSort
  * @typedef {import("./render/header.js").StartRequest} StartRequest
- * @typedef {{ jobs: JobListing[], selfTest: boolean }} JobCatalog
+ * @typedef {{ jobs: JobListing[], selfTest: boolean, liveMaxCalls: number }} JobCatalog
  *
  * @typedef {{
  *   state: RunState,
@@ -59,7 +60,7 @@ async function fetchJobCatalog() {
   }
 
   const body = await response.json();
-  return { jobs: body.jobs, selfTest: body.selfTest === true };
+  return { jobs: body.jobs, selfTest: body.selfTest === true, liveMaxCalls: Number(body.liveMaxCalls) };
 }
 
 /**
@@ -348,11 +349,74 @@ function showRun(runId, jobs) {
 }
 
 /**
+ * @param {string} query
+ * @returns {Promise<import("./render/places.js").SearchOutcome>}
+ */
+async function searchPlaces(query) {
+  try {
+    const response = await fetch("/api/places/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    const body = await response.json();
+
+    if (response.ok === false) {
+      let message = "The hotel search failed.";
+
+      if (typeof body.error === "string") {
+        message = body.error;
+      }
+
+      return { ok: false, error: message };
+    }
+
+    return { ok: true, hotels: body.hotels, sample: body.sample === true };
+  } catch (error) {
+    return { ok: false, error: "Could not reach the server." };
+  }
+}
+
+/**
  * @param {JobCatalog} catalog
  */
 function showPicker(catalog) {
-  findElement("empty-state").hidden = false;
-  createPickerHeader(findElement("topbar"), catalog.jobs, catalog.selfTest, startRun);
+  const emptyState = findElement("empty-state");
+  let pickedJobId = "";
+
+  /** @param {string[]} placeIds */
+  function startPlacesRun(placeIds) {
+    return startRun({ jobId: pickedJobId, provider: "live", placeIds });
+  }
+
+  const finder = createPlacesFinder(findElement("places"), {
+    search: searchPlaces,
+    onStart: startPlacesRun,
+    maxCalls: catalog.liveMaxCalls,
+  });
+
+  /** @param {string | null} jobId */
+  function toggleFinder(jobId) {
+    if (jobId === null) {
+      finder.close();
+      emptyState.hidden = false;
+      return;
+    }
+
+    pickedJobId = jobId;
+    const listing = catalog.jobs.find((job) => job.id === jobId);
+    let found = null;
+
+    if (listing !== undefined) {
+      found = listing;
+    }
+
+    emptyState.hidden = true;
+    finder.open(found);
+  }
+
+  emptyState.hidden = false;
+  createPickerHeader(findElement("topbar"), catalog.jobs, catalog.selfTest, startRun, toggleFinder);
 }
 
 /**
@@ -366,7 +430,7 @@ function showLoadError(message) {
 
 async function main() {
   /** @type {JobCatalog} */
-  let catalog = { jobs: [], selfTest: false };
+  let catalog = { jobs: [], selfTest: false, liveMaxCalls: 0 };
 
   try {
     catalog = await fetchJobCatalog();

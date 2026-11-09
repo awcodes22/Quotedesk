@@ -27,6 +27,7 @@
  *   businessId: string,
  *   name: string,
  *   maskedPhone: string | null,
+ *   listing: import("../../src/core/types").PublicListing | null,
  *   status: CallStatus,
  *   quote: Quote | null,
  *   firstQuote: Quote | null,
@@ -131,14 +132,19 @@ export function createInitialState() {
 
 /**
  * run_started lists businesses, not calls, so the id is built the same way the run loop builds it.
- * @param {{ id: string, name: string, maskedPhone?: string }} business
+ * @param {import("../../src/core/events").RunBusiness} business
  * @returns {CallState}
  */
 function createCall(business) {
   let maskedPhone = null;
+  let listing = null;
 
   if (business.maskedPhone !== undefined) {
     maskedPhone = business.maskedPhone;
+  }
+
+  if (business.publicListing !== undefined) {
+    listing = business.publicListing;
   }
 
   return {
@@ -146,6 +152,7 @@ function createCall(business) {
     businessId: business.id,
     name: business.name,
     maskedPhone,
+    listing,
     status: "queued",
     quote: null,
     firstQuote: null,

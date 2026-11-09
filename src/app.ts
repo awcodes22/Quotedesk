@@ -24,6 +24,8 @@ import { streamLiveEvents, streamRecordedEvents } from "./api/eventStream";
 import { readRecordedEvents } from "./api/registry";
 import type { RunRegistry } from "./api/registry";
 import { SelfTestLimiter } from "./api/selfTest";
+import { PlacesDirectory } from "./places/placesDirectory";
+import { samplePlacesProvider } from "./places/samplePlaces";
 import { startRun } from "./api/startRun";
 import { summarizeRun } from "./api/summary";
 
@@ -38,6 +40,7 @@ export type AppOptions = {
   registry: RunRegistry;
   liveLimits?: LiveLimits;
   selfTestLimiter?: SelfTestLimiter;
+  placesDirectory?: PlacesDirectory;
 };
 
 // zod's messages for these fields never repeat the value, so a typed number can't leak through them.
@@ -46,6 +49,11 @@ const startRunSchema = z.strictObject({
   provider: z.enum(["fake", "text", "live"]),
   scale: z.number().int().min(1).max(MAX_SCALE).optional(),
   testNumber: z.string().min(1).max(40).optional(),
+  placeIds: z.array(z.string().min(1).max(300)).min(1).max(20).optional(),
+});
+
+const placesSearchSchema = z.strictObject({
+  query: z.string().min(1).max(200),
 });
 
 // Run and call ids become file names, so anything that could leave the runs folder is refused.
@@ -92,11 +100,20 @@ function buildJobListing(listed: ListedJob, limits: ListingLimits) {
     },
     reference: job.reference,
     details: job.details,
+    location: nullWhenMissing(job.location),
     decideWithinMs: limits.decideWithinMs,
     maxTurns: limits.maxTurns,
     contactName,
     businessCount,
   };
+}
+
+function nullWhenMissing<Value>(value: Value | undefined): Value | null {
+  if (value === undefined) {
+    return null;
+  }
+
+  return value;
 }
 
 function sendError(response: Response, status: number, error: string): void {
@@ -140,7 +157,13 @@ function buildApiRouter(options: AppOptions): Router {
     selfTestLimiter = options.selfTestLimiter;
   }
 
-  const runSettings = { ...options, selfTestLimiter };
+  let placesDirectory = new PlacesDirectory(samplePlacesProvider());
+
+  if (options.placesDirectory !== undefined) {
+    placesDirectory = options.placesDirectory;
+  }
+
+  const runSettings = { ...options, selfTestLimiter, placesDirectory };
 
   function handleListJobs(_request: Request, response: Response): void {
     const jobs = listAllJobs(options.jobsDirectory, options.privateJobsDirectory);
@@ -156,7 +179,13 @@ function buildApiRouter(options: AppOptions): Router {
       selfTest = true;
     }
 
-    sendJson(response, 200, { jobs: listings, selfTest });
+    let liveMaxCalls = 0;
+
+    if (options.liveLimits !== undefined) {
+      liveMaxCalls = options.liveLimits.maxCalls;
+    }
+
+    sendJson(response, 200, { jobs: listings, selfTest, liveMaxCalls });
   }
 
   async function handleStartRun(
@@ -253,6 +282,26 @@ function buildApiRouter(options: AppOptions): Router {
   }
 
   router.get("/jobs", handleListJobs);
+  // Hotel listings are public, so they are sent whole; errors still go through sendError and are masked.
+  async function handleSearchPlaces(request: Request, response: Response): Promise<void> {
+    const parsed = placesSearchSchema.safeParse(request.body);
+
+    if (parsed.success === false) {
+      sendError(response, 400, z.prettifyError(parsed.error));
+      return;
+    }
+
+    const result = await placesDirectory.search(parsed.data.query);
+
+    if (result.ok === false) {
+      sendError(response, result.status, result.error);
+      return;
+    }
+
+    response.status(200).json({ sample: result.sample, hotels: result.hotels });
+  }
+
+  router.post("/places/search", handleSearchPlaces);
   router.post("/runs", handleStartRun);
   router.get("/runs/:id/events", handleRunEvents);
   router.get("/runs/:id/summary", handleRunSummary);

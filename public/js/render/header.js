@@ -15,7 +15,7 @@ import { findBusinessNoun, runElapsedMs } from "./view.js";
  * @typedef {{ icon: IconName | null, label: string, value: string }} RequestField
  * @typedef {{ fields: RequestField[], finished: boolean, elapsed: string }} RunHeaderModel
  * @typedef {"fake" | "text" | "live"} ProviderName
- * @typedef {{ jobId: string, provider: ProviderName, scale?: number, testNumber?: string }} StartRequest
+ * @typedef {{ jobId: string, provider: ProviderName, scale?: number, testNumber?: string, placeIds?: string[] }} StartRequest
  * @typedef {{ fields: HTMLElement, right: HTMLElement }} HeaderFrame
  */
 
@@ -383,13 +383,24 @@ function createSelfTestOption(onCall, showError) {
 }
 
 /**
+ * Google Places finds hotels, so the search only appears for a hotel job in Live call mode.
+ * @param {string} provider
+ * @param {JobListing} listing
+ * @returns {boolean}
+ */
+export function showsHotelSearch(provider, listing) {
+  return provider === "live" && listing.industry.id === "hotels";
+}
+
+/**
  * Before a run, the header holds only the picker; the request fields arrive with the run.
  * @param {HTMLElement} header
  * @param {JobListing[]} jobs
  * @param {boolean} selfTest Whether the server allows Call me to test.
  * @param {(request: StartRequest) => Promise<string | null>} onStart Resolves with an error to show, or null.
+ * @param {(jobId: string | null) => void} onFindHotels Opens the hotel search for the picked job, or closes it with null.
  */
-export function createPickerHeader(header, jobs, selfTest, onStart) {
+export function createPickerHeader(header, jobs, selfTest, onStart, onFindHotels) {
   const frame = buildHeaderFrame(header);
   const jobSelect = renderJobSelect(jobs);
   const providerSelect = renderProviderSelect();
@@ -410,10 +421,22 @@ export function createPickerHeader(header, jobs, selfTest, onStart) {
   }
 
   const selfTestOption = createSelfTestOption(startSelfTest, showError);
+  const findButton = el("button", { class: "button", type: "button" }, [icon("search", 14), "Find hotels"]);
 
   function showModeOptions() {
+    const listing = jobs.find((job) => job.id === jobSelect.value);
+    let hotelJob = false;
+
+    if (listing !== undefined) {
+      hotelJob = showsHotelSearch(providerSelect.value, listing);
+    }
+
     scaleInput.hidden = providerSelect.value !== "fake";
     selfTestOption.root.hidden = showsSelfTest(providerSelect.value, selfTest) === false;
+    findButton.hidden = hotelJob === false;
+
+    // The search depends on the mode and the job, so it closes whenever either one changes.
+    onFindHotels(null);
   }
 
   async function startCalls() {
@@ -447,9 +470,12 @@ export function createPickerHeader(header, jobs, selfTest, onStart) {
 
   providerSelect.addEventListener("change", showModeOptions);
   startButton.addEventListener("click", startCalls);
+  findButton.addEventListener("click", () => onFindHotels(jobSelect.value));
+  jobSelect.addEventListener("change", showModeOptions);
   showModeOptions();
   frame.right.appendChild(errorText);
   frame.right.appendChild(jobSelect);
+  frame.right.appendChild(findButton);
   frame.right.appendChild(selfTestOption.root);
   frame.right.appendChild(providerSelect);
   frame.right.appendChild(scaleInput);

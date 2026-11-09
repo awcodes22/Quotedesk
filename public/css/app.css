@@ -292,8 +292,160 @@ p {
 .workspace {
   display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
   min-width: 0;
   padding: 16px 24px;
+}
+
+/* ---------- Find hotels ---------- */
+
+.places {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 16px;
+}
+
+.places-head,
+.places-search,
+.places-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.places-head {
+  justify-content: space-between;
+}
+
+.places-query {
+  width: 320px;
+}
+
+.places-notice,
+.places-status {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.places-notice[hidden],
+.places-status:empty {
+  display: none;
+}
+
+.places-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.place {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 2px;
+  border-bottom: var(--card-border);
+}
+
+.place-pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.place-pick input {
+  margin-top: 3px;
+}
+
+.place-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.place-name {
+  font-weight: 600;
+}
+
+.place-address,
+.place-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.place-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding-left: 26px;
+}
+
+.place-link {
+  color: var(--live);
+  font-size: var(--text-sm);
+}
+
+.place-tag {
+  padding: 1px 8px;
+  border: var(--card-border);
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: var(--text-xs);
+}
+
+.places-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.places-row[hidden] {
+  display: none;
+}
+
+.places-counter,
+.places-question {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.places-question {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---------- Hotel info in the call panel ---------- */
+
+.info-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.info-card[hidden] {
+  display: none;
+}
+
+.info-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.info-line a {
+  color: var(--live);
 }
 
 .empty-state {

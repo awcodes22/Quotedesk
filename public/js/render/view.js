@@ -25,6 +25,7 @@ import { isLiveProvider } from "../state.js";
  *   },
  *   reference?: ReferencePrices,
  *   details?: JobDetail[],
+ *   location: string | null,
  *   decideWithinMs: number,
  *   maxTurns: number,
  *   contactName: string | null,

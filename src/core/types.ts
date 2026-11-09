@@ -60,6 +60,8 @@ export type Job = {
   reference?: ReferencePrices;
   contact?: Contact;
   details?: JobDetail[];
+  // Where to look for hotels, such as "downtown Toronto". Prefills the hotel search.
+  location?: string;
   stay?: Stay;
   liveBusinesses?: LiveBusiness[];
   // Set by the server for live runs from LIVE_GUEST_NAME, the name the caller gives.
@@ -134,6 +136,22 @@ export type SimBusiness = {
   phone?: string;
   // Set only for a number typed in on the dashboard for one test call.
   selfTest?: boolean;
+  // Picked on the dashboard for this run, so it skips LIVE_ALLOWED_NUMBERS.
+  approvedForRun?: boolean;
+  // A hotel found through Google Places. Its listing is public and is shown in full.
+  publicListing?: PublicListing;
+};
+
+// A business's public listing, as Google Places shows it to anyone. Not private, so never masked.
+export type PublicListing = {
+  placeId: string;
+  address: string;
+  phone: string;
+  rating: number | null;
+  reviewCount: number | null;
+  priceLevel: string | null;
+  website: string | null;
+  tollFree: boolean;
 };
 
 export type FieldLabel = {

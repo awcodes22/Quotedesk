@@ -7,10 +7,20 @@ import type {
   DecisionDeadline,
   Job,
   PriceCheck,
+  PublicListing,
   Quote,
   RunReport,
   TranscriptLine,
 } from "./types";
+
+// How a run names each business it calls. A Places hotel brings its public listing; any other
+// number is only ever sent masked.
+export type RunBusiness = {
+  id: string;
+  name: string;
+  maskedPhone?: string;
+  publicListing?: PublicListing;
+};
 
 type RunEvent = {
   runId: string;
@@ -28,7 +38,7 @@ export type AgentEvent =
       job: Job;
       industryLabel: string;
       provider: string;
-      businesses: { id: string; name: string; maskedPhone?: string }[];
+      businesses: RunBusiness[];
     })
   | (CallEvent & { type: "call_status"; status: CallStatus })
   | (CallEvent & { type: "transcript"; line: TranscriptLine })

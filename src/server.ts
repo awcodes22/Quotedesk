@@ -4,6 +4,10 @@ import { RunRegistry } from "./api/registry";
 import { startRecorder } from "./core/recorder";
 import type { LiveLimits } from "./providers/live";
 import { createProvider } from "./providers/index";
+import { googlePlacesProvider } from "./places/googlePlaces";
+import type { PlacesProvider } from "./places/googlePlaces";
+import { PlacesDirectory } from "./places/placesDirectory";
+import { samplePlacesProvider } from "./places/samplePlaces";
 
 const RUNS_DIRECTORY = "runs";
 // Gitignored, so job files with real phone numbers never reach the repo.
@@ -24,6 +28,15 @@ if (config.LIVE_GUEST_NAME !== undefined) {
   liveLimits.guestName = config.LIVE_GUEST_NAME;
 }
 
+// Sample hotels stand in until a key is set, so the dashboard works without Google Places.
+function createPlacesProvider(): PlacesProvider {
+  if (config.GOOGLE_PLACES_API_KEY === undefined) {
+    return samplePlacesProvider();
+  }
+
+  return googlePlacesProvider({ apiKey: config.GOOGLE_PLACES_API_KEY, fetch });
+}
+
 const app = createApp({
   jobsDirectory: "data/jobs",
   privateJobsDirectory: PRIVATE_JOBS_DIRECTORY,
@@ -40,6 +53,7 @@ const app = createApp({
   createProvider: (name, fakeOptions) => createProvider(name, config, fakeOptions, RUNS_DIRECTORY),
   registry,
   liveLimits,
+  placesDirectory: new PlacesDirectory(createPlacesProvider()),
 });
 
 // Express 5 also calls this when listening fails, such as when the port is in use.

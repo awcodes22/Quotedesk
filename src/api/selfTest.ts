@@ -1,10 +1,8 @@
 import { maskPhone, normalizeNorthAmericanNumber } from "../privacy";
+import { HourlyLimiter } from "./hourlyLimiter";
 
 export const SELF_TEST_RUNS_PER_HOUR = 3;
 export const SELF_TEST_NAME = "Test call";
-
-const HOUR_MS = 60 * 60 * 1000;
-const MINUTE_MS = 60 * 1000;
 
 export type SelfTestNumber = { ok: true; phone: string } | { ok: false; error: string };
 
@@ -27,30 +25,24 @@ export function readSelfTestNumber(input: string): SelfTestNumber {
 
 // Kept in memory on purpose: nothing about a test number is ever written down, not even when it was used.
 export class SelfTestLimiter {
-  private readonly now: () => number;
   private readonly limit: number;
-  private startTimes: number[] = [];
+  private readonly limiter: HourlyLimiter;
 
   constructor(now: () => number = Date.now, limit: number = SELF_TEST_RUNS_PER_HOUR) {
-    this.now = now;
     this.limit = limit;
+    this.limiter = new HourlyLimiter(limit, now);
   }
 
   take(): LimiterResult {
-    const now = this.now();
-    this.startTimes = this.startTimes.filter((startedAt) => now - startedAt < HOUR_MS);
+    const slot = this.limiter.take();
 
-    const oldest = this.startTimes[0];
-
-    if (this.startTimes.length >= this.limit && oldest !== undefined) {
-      const waitMinutes = Math.ceil((oldest + HOUR_MS - now) / MINUTE_MS);
+    if (slot.ok === false) {
       return {
         ok: false,
-        error: `Only ${this.limit} test calls are allowed per hour. Try again in ${waitMinutes} minutes.`,
+        error: `Only ${this.limit} test calls are allowed per hour. Try again in ${slot.waitMinutes} minutes.`,
       };
     }
 
-    this.startTimes.push(now);
     return { ok: true };
   }
 }

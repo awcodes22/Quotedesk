@@ -49,6 +49,7 @@ const jobSchema = z.strictObject({
   reference: referenceSchema.optional(),
   contact: contactSchema.optional(),
   details: z.array(detailSchema).optional(),
+  location: z.string().min(1).max(100).optional(),
   stay: staySchema.optional(),
   liveBusinesses: z.array(liveBusinessSchema).optional(),
 });

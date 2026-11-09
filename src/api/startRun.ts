@@ -2,7 +2,7 @@ import { onEvent } from "../core/events";
 import type { AgentEvent } from "../core/events";
 import { isRunning, runJob } from "../core/run";
 import type { RunOptions } from "../core/run";
-import type { IndustryConfig, Job, LiveBusiness, SimBusiness } from "../core/types";
+import type { IndustryConfig, Job, LiveBusiness, PublicListing, SimBusiness } from "../core/types";
 import { getIndustry } from "../industries/index";
 import { listAllJobs } from "../jobs";
 import type { ListedJob } from "../jobs";
@@ -11,6 +11,8 @@ import type { FakeProviderOptions } from "../providers/fake";
 import { checkLiveBusinesses, liveRunTimeoutMs, toSimBusinesses } from "../providers/live";
 import type { LiveLimits } from "../providers/live";
 import type { CallProvider } from "../providers/types";
+import type { PlaceHotel } from "../places/googlePlaces";
+import type { PlacesDirectory } from "../places/placesDirectory";
 import { scaleRun } from "../scale";
 import { readSelfTestNumber, SELF_TEST_NAME } from "./selfTest";
 import type { LimiterResult, SelfTestLimiter } from "./selfTest";
@@ -21,6 +23,8 @@ export type StartRunRequest = {
   scale?: number;
   // Typed on the dashboard for one test call; held in memory only and never logged.
   testNumber?: string;
+  // Hotels picked from a Places search; the server looks them up in its own cache.
+  placeIds?: string[];
 };
 
 export type StartRunSettings = {
@@ -30,6 +34,7 @@ export type StartRunSettings = {
   createProvider: (name: string, fakeOptions?: FakeProviderOptions) => CallProvider;
   liveLimits?: LiveLimits;
   selfTestLimiter?: SelfTestLimiter;
+  placesDirectory?: PlacesDirectory;
 };
 
 type PreparedRun = {
@@ -175,13 +180,72 @@ function pickJobCalls(listed: ListedJob, limits: LiveLimits): SimBusiness[] | st
   return toSimBusinesses(businesses);
 }
 
+function toPublicListing(hotel: PlaceHotel): PublicListing {
+  return {
+    placeId: hotel.placeId,
+    address: hotel.address,
+    phone: hotel.phone,
+    rating: hotel.rating,
+    reviewCount: hotel.reviewCount,
+    priceLevel: hotel.priceLevel,
+    website: hotel.website,
+    tollFree: hotel.tollFree,
+  };
+}
+
+// Hotels come from the server's own search cache, never from the browser, so a picked id
+// can only dial a number Google Places just listed. Picking one approves it for this run alone.
+function pickPlacesCalls(
+  placeIds: string[],
+  limits: LiveLimits,
+  directory: PlacesDirectory | undefined,
+): SimBusiness[] | string {
+  const uniqueIds = [...new Set(placeIds)];
+
+  if (directory === undefined) {
+    return "Hotel search is unavailable on this server.";
+  }
+
+  if (uniqueIds.length === 0 || uniqueIds.length > limits.maxCalls) {
+    return `Pick between 1 and ${limits.maxCalls} hotels.`;
+  }
+
+  const found = directory.lookUp(uniqueIds);
+
+  if (found.ok === false) {
+    return found.error;
+  }
+
+  const liveBusinesses = found.hotels.map((hotel) => ({ name: hotel.name, phone: hotel.phone }));
+  const simBusinesses = toSimBusinesses(liveBusinesses);
+
+  return simBusinesses.map((business, index) => {
+    const hotel = found.hotels[index];
+
+    if (hotel === undefined) {
+      return business;
+    }
+
+    return { ...business, approvedForRun: true, publicListing: toPublicListing(hotel) };
+  });
+}
+
 function pickLiveCalls(
   request: StartRunRequest,
   listed: ListedJob,
+  settings: StartRunSettings,
   limits: LiveLimits,
 ): SimBusiness[] | string {
+  if (request.testNumber !== undefined && request.placeIds !== undefined) {
+    return "Pick hotels or enter a test number, not both.";
+  }
+
   if (request.testNumber !== undefined) {
     return pickSelfTestCall(request.testNumber, limits);
+  }
+
+  if (request.placeIds !== undefined) {
+    return pickPlacesCalls(request.placeIds, limits, settings.placesDirectory);
   }
 
   return pickJobCalls(listed, limits);
@@ -201,14 +265,14 @@ function prepareLiveRun(
     return "Live calls are unavailable on this server.";
   }
 
-  const calls = pickLiveCalls(request, listed, limits);
+  const calls = pickLiveCalls(request, listed, settings, limits);
 
   if (typeof calls === "string") {
     return calls;
   }
 
   if (job.stay === undefined) {
-    return "A live job needs a stay with checkIn, checkOut and beds.";
+    return "This job has no stay dates, so it can't be used for live calls. Pick a hotel job with dates.";
   }
 
   const industry = getIndustry(job.industryId);
@@ -234,6 +298,10 @@ function prepareAnyRun(
 ): PreparedRun | string {
   if (request.testNumber !== undefined && request.provider !== "live") {
     return "A test call only works in Live call mode.";
+  }
+
+  if (request.placeIds !== undefined && request.provider !== "live") {
+    return "Picked hotels only work in Live call mode.";
   }
 
   if (request.provider !== "live") {

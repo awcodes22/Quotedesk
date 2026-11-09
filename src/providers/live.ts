@@ -461,8 +461,9 @@ function findRefusal(
   callsStarted: number,
 ): string | undefined {
   const phone = context.business.phone;
-  // A test number was typed in on the dashboard and checked by the server, so it skips the allowlist.
-  const isSelfTest = context.business.selfTest === true;
+  // A typed-in test number or a hotel picked from Places search was approved for this run alone,
+  // so it skips the allowlist.
+  const approvedForRun = context.business.selfTest === true || context.business.approvedForRun === true;
 
   if (callsStarted >= options.maxCalls) {
     return `LIVE_MAX_CALLS allows ${options.maxCalls} calls per run.`;
@@ -472,7 +473,7 @@ function findRefusal(
     return `${context.business.name} has no phone number, so it was not dialed.`;
   }
 
-  if (isSelfTest === false && options.allowedNumbers.includes(phone) === false) {
+  if (approvedForRun === false && options.allowedNumbers.includes(phone) === false) {
     return `${context.business.name} is not on LIVE_ALLOWED_NUMBERS, so it was not dialed.`;
   }
 

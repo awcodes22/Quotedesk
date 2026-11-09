@@ -7,6 +7,7 @@ import type {
   SpokenLine,
 } from "../providers/types";
 import { emit } from "./events";
+import type { RunBusiness } from "./events";
 import { DECISION_MADE_ERROR, HeadAgent } from "./headAgent";
 import type { ReportResult } from "./headAgent";
 import { runPriceCheck } from "./priceCheck";
@@ -428,12 +429,16 @@ function emitRunStarted(
   businesses: SimBusiness[],
 ): void {
   const businessSummaries = businesses.map((business) => {
-    const summary: { id: string; name: string; maskedPhone?: string } = {
+    const summary: RunBusiness = {
       id: business.id,
       name: business.name,
     };
 
-    if (business.phone !== undefined) {
+    // A Places hotel's listing is public and shown in full; any other number, such as a
+    // test number or one from a private job, only ever leaves as its masked form.
+    if (business.publicListing !== undefined) {
+      summary.publicListing = business.publicListing;
+    } else if (business.phone !== undefined) {
       summary.maskedPhone = maskPhone(business.phone);
     }
 

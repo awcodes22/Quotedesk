@@ -1,5 +1,7 @@
 // @ts-check
 import { clear, el, icon } from "../dom.js";
+import { formatPublicPhone } from "../phone.js";
+import { formatRating } from "./places.js";
 import {
   formatClock,
   formatMoney,
@@ -61,7 +63,16 @@ import {
  *   quote: QuoteCardModel,
  *   agentSentence: string,
  *   transcript: TranscriptModel,
+ *   info: InfoCardModel | null,
  * }} CallPanelModel
+ * @typedef {{
+ *   name: string,
+ *   address: string,
+ *   phone: string,
+ *   phoneHref: string,
+ *   rating: string | null,
+ *   website: string | null,
+ * }} InfoCardModel
  */
 
 const AGENT_NAME = "AI caller";
@@ -568,7 +579,63 @@ export function selectCallPanelModel(view, call) {
     quote: buildQuoteCard(view, call, ranking),
     agentSentence: describeStanding(view, call, ranking),
     transcript: buildTranscript(view, call),
+    info: buildInfoCard(call),
   };
+}
+
+/**
+ * Only a hotel found through Google Places has a public listing. Its number is shown in full
+ * because anyone can look it up; a test number or a private job's number never gets here.
+ * @param {CallState} call
+ * @returns {InfoCardModel | null}
+ */
+export function buildInfoCard(call) {
+  const listing = call.listing;
+
+  if (listing === null) {
+    return null;
+  }
+
+  return {
+    name: call.name,
+    address: listing.address,
+    phone: formatPublicPhone(listing.phone),
+    phoneHref: `tel:${listing.phone}`,
+    rating: formatRating(listing.rating, listing.reviewCount),
+    website: listing.website,
+  };
+}
+
+/**
+ * @param {HTMLElement} card
+ * @param {InfoCardModel | null} model
+ */
+function renderInfoCard(card, model) {
+  clear(card);
+  card.hidden = model === null;
+
+  if (model === null) {
+    return;
+  }
+
+  card.appendChild(el("span", { class: "section-label" }, ["HOTEL"]));
+  card.appendChild(el("span", { class: "call-card-name" }, [model.name]));
+  card.appendChild(el("span", { class: "info-line" }, [icon("map-pin", 14), model.address]));
+  card.appendChild(
+    el("span", { class: "info-line tabular" }, [icon("phone", 14), el("a", { href: model.phoneHref }, [model.phone])]),
+  );
+
+  if (model.rating !== null) {
+    card.appendChild(el("span", { class: "info-line" }, [icon("star", 14), model.rating]));
+  }
+
+  if (model.website !== null) {
+    card.appendChild(
+      el("span", { class: "info-line" }, [
+        el("a", { href: model.website, target: "_blank", rel: "noopener noreferrer" }, ["Website"]),
+      ]),
+    );
+  }
 }
 
 /**
@@ -965,10 +1032,12 @@ export function createCallPanel(panel) {
   const quoteCard = el("section", { class: "card panel-card quote-card" });
   const agentCard = el("section", { class: "card panel-card panel-agent" });
   const transcriptCard = el("section", { class: "card panel-card transcript-card" });
+  const infoCard = el("section", { class: "card panel-card info-card", "aria-label": "Hotel details" });
   const transcript = createTranscript(transcriptCard);
-  const lastKeys = { call: "", quote: "", agent: "", transcript: "" };
+  const lastKeys = { call: "", quote: "", agent: "", transcript: "", info: "" };
 
   panel.appendChild(callCard);
+  panel.appendChild(infoCard);
   panel.appendChild(quoteCard);
   panel.appendChild(agentCard);
   panel.appendChild(transcriptCard);
@@ -987,6 +1056,13 @@ export function createCallPanel(panel) {
     if (quoteKey !== lastKeys.quote) {
       lastKeys.quote = quoteKey;
       renderQuoteCard(quoteCard, model.quote);
+    }
+
+    const infoKey = JSON.stringify(model.info);
+
+    if (infoKey !== lastKeys.info) {
+      lastKeys.info = infoKey;
+      renderInfoCard(infoCard, model.info);
     }
 
     if (model.agentSentence !== lastKeys.agent) {

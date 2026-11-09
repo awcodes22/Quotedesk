@@ -2,6 +2,7 @@
   "id": "toronto-weekend-live",
   "industryId": "hotels",
   "title": "2 nights in Toronto (live calls)",
+  "location": "downtown Toronto",
   "request": "a room for 2 guests for 2 nights",
   "stay": {
     "checkIn": "2026-11-20",
