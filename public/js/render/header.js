@@ -13,7 +13,7 @@ import { findBusinessNoun, runElapsedMs } from "./view.js";
  * @typedef {{ icon: IconName | null, label: string, value: string }} RequestField
  * @typedef {{ fields: RequestField[], finished: boolean, elapsed: string }} RunHeaderModel
  * @typedef {"fake" | "text" | "live"} ProviderName
- * @typedef {{ jobId: string, provider: ProviderName, scale?: number }} StartRequest
+ * @typedef {{ jobId: string, provider: ProviderName, scale?: number, testCall?: boolean }} StartRequest
  * @typedef {{ fields: HTMLElement, right: HTMLElement }} HeaderFrame
  */
 
@@ -252,23 +252,50 @@ function readScale(provider, scaleInput) {
 }
 
 /**
+ * The test call needs a number set on the server, and only makes sense for live calls.
+ * @param {string} provider
+ * @param {boolean} liveTestCall
+ * @returns {boolean}
+ */
+export function showsTestCall(provider, liveTestCall) {
+  return liveTestCall && provider === "live";
+}
+
+/**
+ * The browser never holds the number; ticking this only asks the server to dial its own.
+ * @returns {{ label: HTMLLabelElement, checkbox: HTMLInputElement }}
+ */
+function renderTestCallOption() {
+  const checkbox = el("input", { type: "checkbox" });
+  const label = el("label", { class: "picker-check", title: "One live call to LIVE_TEST_NUMBER, named Test call" }, [
+    checkbox,
+    "Test with my phone",
+  ]);
+
+  return { label, checkbox };
+}
+
+/**
  * Before a run, the header holds only the picker; the request fields arrive with the run.
  * @param {HTMLElement} header
  * @param {JobListing[]} jobs
+ * @param {boolean} liveTestCall Whether the server has a test number to dial.
  * @param {(request: StartRequest) => Promise<string | null>} onStart Resolves with an error to show, or null.
  */
-export function createPickerHeader(header, jobs, onStart) {
+export function createPickerHeader(header, jobs, liveTestCall, onStart) {
   const frame = buildHeaderFrame(header);
   const jobSelect = renderJobSelect(jobs);
   const providerSelect = renderProviderSelect();
   const scaleInput = renderScaleInput();
+  const testCall = renderTestCallOption();
   const startButton = el("button", { class: "button button-primary", type: "button" }, [
     "Start calls",
   ]);
   const errorText = el("span", { class: "picker-error", role: "alert" });
 
-  function showScaleForFakeCalls() {
+  function showModeOptions() {
     scaleInput.hidden = providerSelect.value !== "fake";
+    testCall.label.hidden = showsTestCall(providerSelect.value, liveTestCall) === false;
   }
 
   async function startCalls() {
@@ -284,6 +311,10 @@ export function createPickerHeader(header, jobs, onStart) {
       request.scale = scale;
     }
 
+    if (showsTestCall(provider, liveTestCall) && testCall.checkbox.checked) {
+      request.testCall = true;
+    }
+
     const error = await onStart(request);
 
     if (error !== null) {
@@ -292,10 +323,12 @@ export function createPickerHeader(header, jobs, onStart) {
     }
   }
 
-  providerSelect.addEventListener("change", showScaleForFakeCalls);
+  providerSelect.addEventListener("change", showModeOptions);
   startButton.addEventListener("click", startCalls);
+  showModeOptions();
   frame.right.appendChild(errorText);
   frame.right.appendChild(jobSelect);
+  frame.right.appendChild(testCall.label);
   frame.right.appendChild(providerSelect);
   frame.right.appendChild(scaleInput);
   frame.right.appendChild(startButton);

@@ -26,6 +26,7 @@
  *   callId: string,
  *   businessId: string,
  *   name: string,
+ *   maskedPhone: string | null,
  *   status: CallStatus,
  *   quote: Quote | null,
  *   firstQuote: Quote | null,
@@ -130,15 +131,21 @@ export function createInitialState() {
 
 /**
  * run_started lists businesses, not calls, so the id is built the same way the run loop builds it.
- * @param {string} businessId
- * @param {string} name
+ * @param {{ id: string, name: string, maskedPhone?: string }} business
  * @returns {CallState}
  */
-function createCall(businessId, name) {
+function createCall(business) {
+  let maskedPhone = null;
+
+  if (business.maskedPhone !== undefined) {
+    maskedPhone = business.maskedPhone;
+  }
+
   return {
-    callId: `call-${businessId}`,
-    businessId,
-    name,
+    callId: `call-${business.id}`,
+    businessId: business.id,
+    name: business.name,
+    maskedPhone,
     status: "queued",
     quote: null,
     firstQuote: null,
@@ -199,7 +206,7 @@ function startRun(state, event) {
   const callOrder = [];
 
   for (const business of event.businesses) {
-    const call = createCall(business.id, business.name);
+    const call = createCall(business);
     calls[call.callId] = call;
     callOrder.push(call.callId);
   }

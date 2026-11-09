@@ -2,16 +2,30 @@ import { createApp } from "./app";
 import { config } from "./config";
 import { RunRegistry } from "./api/registry";
 import { startRecorder } from "./core/recorder";
-import { createProvider } from "./providers/index";
+import type { LiveLimits } from "./providers/live";
+import { createProvider, listAllowedLiveNumbers } from "./providers/index";
 
 const RUNS_DIRECTORY = "runs";
+// Gitignored, so job files with real phone numbers never reach the repo.
+const PRIVATE_JOBS_DIRECTORY = "local/jobs";
 
 const registry = new RunRegistry();
 registry.start();
 startRecorder(RUNS_DIRECTORY);
 
+const liveLimits: LiveLimits = {
+  allowedNumbers: listAllowedLiveNumbers(config),
+  maxCalls: config.LIVE_MAX_CALLS,
+  callTimeoutMs: config.LIVE_CALL_TIMEOUT_MS,
+};
+
+if (config.LIVE_TEST_NUMBER !== undefined) {
+  liveLimits.testNumber = config.LIVE_TEST_NUMBER;
+}
+
 const app = createApp({
   jobsDirectory: "data/jobs",
+  privateJobsDirectory: PRIVATE_JOBS_DIRECTORY,
   runsDirectory: RUNS_DIRECTORY,
   publicDirectory: "public",
   runOptions: {
@@ -24,11 +38,7 @@ const app = createApp({
   maxTurns: config.MAX_TURNS,
   createProvider: (name, fakeOptions) => createProvider(name, config, fakeOptions, RUNS_DIRECTORY),
   registry,
-  liveLimits: {
-    allowedNumbers: config.LIVE_ALLOWED_NUMBERS,
-    maxCalls: config.LIVE_MAX_CALLS,
-    callTimeoutMs: config.LIVE_CALL_TIMEOUT_MS,
-  },
+  liveLimits,
 });
 
 // Express 5 also calls this when listening fails, such as when the port is in use.

@@ -142,6 +142,11 @@ function buildCallCard(view, call) {
     subtitle = "Live phone call";
   }
 
+  // The server only ever sends the masked form, such as +1 ••• ••• ••23.
+  if (isLiveRun(view) && call.maskedPhone !== null) {
+    subtitle = `Live phone call · ${call.maskedPhone}`;
+  }
+
   return {
     name: call.name,
     initials: initials(call.name),

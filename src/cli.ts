@@ -18,6 +18,7 @@ import { loadJob } from "./jobs";
 import { createProvider } from "./providers/index";
 import type { FakeProviderOptions } from "./providers/fake";
 import type { RunOptions } from "./core/run";
+import { describeError } from "./privacy";
 import { scaleRun } from "./scale";
 
 const RUNS_DIRECTORY = "runs";
@@ -307,7 +308,7 @@ async function main(): Promise<void> {
 }
 
 function handleFailure(error: unknown): void {
-  console.error(String(error));
+  console.error(describeError(error));
   process.exitCode = 1;
 }
 

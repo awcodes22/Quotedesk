@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { onEvent } from "../core/events";
+import { describeError } from "../privacy";
 import type { AgentEvent, EventListener } from "../core/events";
 import { getRunLogPath } from "../core/recorder";
 
@@ -22,7 +23,7 @@ function notifyFollower(follower: EventListener, event: AgentEvent): void {
   try {
     follower(event);
   } catch (error) {
-    console.error("A run follower failed:", error);
+    console.error(`A run follower failed: ${describeError(error)}`);
   }
 }
 

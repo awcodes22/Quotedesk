@@ -255,6 +255,17 @@ p {
   width: 90px;
 }
 
+.picker-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.picker-check[hidden] {
+  display: none;
+}
+
 .picker-error {
   max-width: 280px;
   font-size: var(--text-sm);

@@ -13,7 +13,7 @@ import { runJob } from "../src/core/run";
 import type { CallOutcome, CallStatus, Job, SimBusiness } from "../src/core/types";
 import { hotels } from "../src/industries/hotels";
 import { listJobs, loadJob } from "../src/jobs";
-import { elevenLabsClient, hidePhoneNumbers } from "../src/providers/elevenLabs";
+import { elevenLabsClient } from "../src/providers/elevenLabs";
 import type { ConversationStatus, ConversationTurn, FetchFunction } from "../src/providers/elevenLabs";
 import { createProvider, findMissingLiveSettings } from "../src/providers/index";
 import type { ProviderConfig } from "../src/providers/index";
@@ -32,6 +32,7 @@ import { createQuoteExtractor } from "../src/providers/quoteExtractor";
 import type { JsonCompletion } from "../src/providers/quoteExtractor";
 import type { CallContext, SpokenLine } from "../src/providers/types";
 
+const EXAMPLE_JOB_PATH = "data/jobs/examples/hotels-live.example.json";
 const ALLOWED = "+15555550101";
 const OTHER_ALLOWED = "+15555550102";
 const NOT_ALLOWED = "+15555550199";
@@ -170,7 +171,7 @@ function countLookups(fake: FakeElevenLabs): number {
 }
 
 function liveJob(): Job {
-  const job = loadJob("data/jobs/hotels-live.example.json");
+  const job = loadJob(EXAMPLE_JOB_PATH);
   return { ...job, liveBusinesses: undefined };
 }
 
@@ -562,12 +563,6 @@ describe("a live run end to end", () => {
   });
 });
 
-describe("hidePhoneNumbers", () => {
-  it("masks numbers in error text", () => {
-    expect(hidePhoneNumbers("Could not reach +1 555 555 0101 now")).toBe("Could not reach [number] now");
-  });
-});
-
 describe("live settings", () => {
   const noLiveConfig: ProviderConfig = {
     OPENAI_API_KEY: undefined,
@@ -598,7 +593,7 @@ describe("live settings", () => {
       "LIVE_GUEST_NAME",
       "OPENAI_API_KEY",
       "OPENAI_MODEL",
-      "LIVE_ALLOWED_NUMBERS",
+      "LIVE_ALLOWED_NUMBERS or LIVE_TEST_NUMBER",
     ]);
     expect(() => createProvider("live", noLiveConfig)).toThrow("Live calls are unavailable");
   });
@@ -610,17 +605,12 @@ describe("live settings", () => {
 });
 
 describe("live jobs", () => {
-  it("skips example files when listing jobs", () => {
-    const directory = createTempDirectory();
-    const example = JSON.stringify({ id: "example", industryId: "hotels", title: "Example", request: "A room" });
-    writeFileSync(join(directory, "hotels-live.example.json"), example);
-    writeFileSync(join(directory, "real.json"), example.replace('"example"', '"real"'));
-
-    expect(listJobs(directory).map((job) => job.id)).toEqual(["real"]);
+  it("never offers the examples subfolder as a job", () => {
+    expect(listJobs("data/jobs").map((job) => job.id)).toEqual(["airport-rental", "toronto-weekend"]);
   });
 
   it("accepts the committed example with its stay and live businesses", () => {
-    const job = loadJob("data/jobs/hotels-live.example.json");
+    const job = loadJob(EXAMPLE_JOB_PATH);
 
     expect(job.stay).toEqual({ checkIn: "2026-11-20", checkOut: "2026-11-22", beds: "one king bed" });
     expect(job.liveBusinesses).toHaveLength(2);

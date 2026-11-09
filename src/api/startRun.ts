@@ -4,7 +4,9 @@ import { isRunning, runJob } from "../core/run";
 import type { RunOptions } from "../core/run";
 import type { IndustryConfig, Job, LiveBusiness } from "../core/types";
 import { getIndustry } from "../industries/index";
-import { listJobs } from "../jobs";
+import { listAllJobs } from "../jobs";
+import type { ListedJob } from "../jobs";
+import { describeError } from "../privacy";
 import type { FakeProviderOptions } from "../providers/fake";
 import { checkLiveBusinesses, liveRunTimeoutMs, toSimBusinesses } from "../providers/live";
 import type { LiveLimits } from "../providers/live";
@@ -15,10 +17,12 @@ export type StartRunRequest = {
   jobId: string;
   provider: string;
   scale?: number;
+  testCall?: boolean;
 };
 
 export type StartRunSettings = {
   jobsDirectory: string;
+  privateJobsDirectory?: string;
   runOptions: RunOptions;
   createProvider: (name: string, fakeOptions?: FakeProviderOptions) => CallProvider;
   liveLimits?: LiveLimits;
@@ -35,21 +39,20 @@ export type StartRunResult =
   | { ok: true; runId: string }
   | { ok: false; status: 400 | 404 | 409; error: string };
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
-}
+const TEST_CALL_NAME = "Test call";
 
 function logRunFailure(error: unknown): void {
-  console.error("A run failed:", error);
+  console.error(`A run failed: ${describeError(error)}`);
 }
 
-function findJob(jobsDirectory: string, jobId: string): Job | undefined {
-  const jobs = listJobs(jobsDirectory);
-  return jobs.find((job) => job.id === jobId);
+function findJob(settings: StartRunSettings, jobId: string): ListedJob | undefined {
+  const listed = listAllJobs(settings.jobsDirectory, settings.privateJobsDirectory);
+  return listed.find((entry) => entry.job.id === jobId);
+}
+
+// The job is logged and streamed to the dashboard, so the phone numbers never travel with it.
+function withoutPhoneNumbers(job: Job): Job {
+  return { ...job, liveBusinesses: undefined };
 }
 
 // runJob emits run_started before its first await, so the id is known as soon as it is called.
@@ -89,7 +92,7 @@ function createProviderSafely(
   try {
     return settings.createProvider(name, fakeOptions);
   } catch (error) {
-    return getErrorMessage(error);
+    return describeError(error);
   }
 }
 
@@ -100,9 +103,10 @@ function prepareRun(
   settings: StartRunSettings,
 ): PreparedRun | string {
   const industry = getIndustry(job.industryId);
+  const publicJob = withoutPhoneNumbers(job);
 
   if (request.scale === undefined) {
-    return { job, industry, runOptions: settings.runOptions, fakeOptions: {} };
+    return { job: publicJob, industry, runOptions: settings.runOptions, fakeOptions: {} };
   }
 
   if (request.provider !== "fake") {
@@ -110,7 +114,7 @@ function prepareRun(
   }
 
   try {
-    const scaled = scaleRun(job, industry, request.scale);
+    const scaled = scaleRun(publicJob, industry, request.scale);
     const parallelCalls = scaled.industry.simBusinesses.length;
 
     return {
@@ -120,22 +124,62 @@ function prepareRun(
       fakeOptions: { failBusinessIds: scaled.noAnswerIds },
     };
   } catch (error) {
-    return getErrorMessage(error);
+    return describeError(error);
   }
+}
+
+// A test call rings the developer's own phone, which the server reads from .env.
+function pickTestBusiness(limits: LiveLimits): LiveBusiness[] | string {
+  if (limits.testNumber === undefined) {
+    return "Set LIVE_TEST_NUMBER in .env to test with your phone.";
+  }
+
+  return [{ name: TEST_CALL_NAME, phone: limits.testNumber }];
+}
+
+// Real hotel numbers only come from the private folder, which git never sees.
+function pickJobBusinesses(listed: ListedJob): LiveBusiness[] | string {
+  if (listed.isPrivate === false) {
+    return "Live calls only use private jobs from local/jobs. Pick a (private) job or test with your phone.";
+  }
+
+  if (listed.job.liveBusinesses === undefined) {
+    return [];
+  }
+
+  return listed.job.liveBusinesses;
+}
+
+function pickLiveBusinesses(
+  request: StartRunRequest,
+  listed: ListedJob,
+  limits: LiveLimits,
+): LiveBusiness[] | string {
+  if (request.testCall === true) {
+    return pickTestBusiness(limits);
+  }
+
+  return pickJobBusinesses(listed);
 }
 
 // Live calls quote only after they hang up, so the head agent waits for every call
 // instead of deciding a window after the first quote.
-function prepareLiveRun(job: Job, settings: StartRunSettings): PreparedRun | string {
+function prepareLiveRun(
+  request: StartRunRequest,
+  listed: ListedJob,
+  settings: StartRunSettings,
+): PreparedRun | string {
   const limits = settings.liveLimits;
-  let businesses: LiveBusiness[] = [];
+  const job = listed.job;
 
   if (limits === undefined) {
     return "Live calls are unavailable on this server.";
   }
 
-  if (job.liveBusinesses !== undefined) {
-    businesses = job.liveBusinesses;
+  const businesses = pickLiveBusinesses(request, listed, limits);
+
+  if (typeof businesses === "string") {
+    return businesses;
   }
 
   const problem = checkLiveBusinesses(businesses, limits);
@@ -152,8 +196,7 @@ function prepareLiveRun(job: Job, settings: StartRunSettings): PreparedRun | str
   const timeoutMs = liveRunTimeoutMs(limits.callTimeoutMs, businesses.length);
 
   return {
-    // The numbers stay out of the job, which is logged and sent to the dashboard.
-    job: { ...job, businessIds: undefined, liveBusinesses: undefined },
+    job: { ...withoutPhoneNumbers(job), businessIds: undefined },
     industry: { ...industry, simBusinesses: toSimBusinesses(businesses) },
     runOptions: {
       ...settings.runOptions,
@@ -167,18 +210,22 @@ function prepareLiveRun(job: Job, settings: StartRunSettings): PreparedRun | str
 
 function prepareAnyRun(
   request: StartRunRequest,
-  job: Job,
+  listed: ListedJob,
   settings: StartRunSettings,
 ): PreparedRun | string {
+  if (request.testCall === true && request.provider !== "live") {
+    return "A test call only works in Live call mode.";
+  }
+
   if (request.provider !== "live") {
-    return prepareRun(request, job, settings);
+    return prepareRun(request, listed.job, settings);
   }
 
   if (request.scale !== undefined) {
     return "Scale only works with the fake provider.";
   }
 
-  return prepareLiveRun(job, settings);
+  return prepareLiveRun(request, listed, settings);
 }
 
 export async function startRun(
@@ -189,9 +236,9 @@ export async function startRun(
     return { ok: false, status: 409, error: "A run is already in progress." };
   }
 
-  const job = findJob(settings.jobsDirectory, request.jobId);
+  const listed = findJob(settings, request.jobId);
 
-  if (job === undefined) {
+  if (listed === undefined) {
     return { ok: false, status: 404, error: `Unknown job "${request.jobId}".` };
   }
 
@@ -204,7 +251,7 @@ export async function startRun(
     }
   }
 
-  const prepared = prepareAnyRun(request, job, settings);
+  const prepared = prepareAnyRun(request, listed, settings);
 
   if (typeof prepared === "string") {
     return { ok: false, status: 400, error: prepared };
@@ -225,6 +272,6 @@ export async function startRun(
     );
     return { ok: true, runId };
   } catch (error) {
-    return { ok: false, status: 400, error: getErrorMessage(error) };
+    return { ok: false, status: 400, error: describeError(error) };
   }
 }

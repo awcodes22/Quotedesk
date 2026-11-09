@@ -1,4 +1,5 @@
 import pLimit from "p-limit";
+import { maskPhone } from "../privacy";
 import type {
   CallContext,
   CallHandle,
@@ -427,7 +428,16 @@ function emitRunStarted(
   businesses: SimBusiness[],
 ): void {
   const businessSummaries = businesses.map((business) => {
-    return { id: business.id, name: business.name };
+    const summary: { id: string; name: string; maskedPhone?: string } = {
+      id: business.id,
+      name: business.name,
+    };
+
+    if (business.phone !== undefined) {
+      summary.maskedPhone = maskPhone(business.phone);
+    }
+
+    return summary;
   });
 
   emit({

@@ -18,6 +18,7 @@ import { createTracker, selectTrackerModel } from "./render/tracker.js";
  * @typedef {import("./render/view.js").GridFilter} GridFilter
  * @typedef {import("./render/view.js").GridSort} GridSort
  * @typedef {import("./render/header.js").StartRequest} StartRequest
+ * @typedef {{ jobs: JobListing[], liveTestCall: boolean }} JobCatalog
  *
  * @typedef {{
  *   state: RunState,
@@ -48,8 +49,8 @@ function findElement(id) {
   return element;
 }
 
-/** @returns {Promise<JobListing[]>} */
-async function fetchJobs() {
+/** @returns {Promise<JobCatalog>} */
+async function fetchJobCatalog() {
   const response = await fetch("/api/jobs");
 
   if (response.ok === false) {
@@ -57,7 +58,7 @@ async function fetchJobs() {
   }
 
   const body = await response.json();
-  return body.jobs;
+  return { jobs: body.jobs, liveTestCall: body.liveTestCall === true };
 }
 
 /**
@@ -344,11 +345,11 @@ function showRun(runId, jobs) {
 }
 
 /**
- * @param {JobListing[]} jobs
+ * @param {JobCatalog} catalog
  */
-function showPicker(jobs) {
+function showPicker(catalog) {
   findElement("empty-state").hidden = false;
-  createPickerHeader(findElement("topbar"), jobs, startRun);
+  createPickerHeader(findElement("topbar"), catalog.jobs, catalog.liveTestCall, startRun);
 }
 
 /**
@@ -361,10 +362,11 @@ function showLoadError(message) {
 }
 
 async function main() {
-  let jobs = /** @type {JobListing[]} */ ([]);
+  /** @type {JobCatalog} */
+  let catalog = { jobs: [], liveTestCall: false };
 
   try {
-    jobs = await fetchJobs();
+    catalog = await fetchJobCatalog();
   } catch (error) {
     showLoadError("Could not load the jobs. Is the server running?");
     return;
@@ -373,11 +375,11 @@ async function main() {
   const runId = readRunId();
 
   if (runId === null) {
-    showPicker(jobs);
+    showPicker(catalog);
     return;
   }
 
-  showRun(runId, jobs);
+  showRun(runId, catalog.jobs);
 }
 
 main();

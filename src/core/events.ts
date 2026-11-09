@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { describeError, maskStrings } from "../privacy";
 import type {
   CallCommand,
   CallStatus,
@@ -27,7 +28,7 @@ export type AgentEvent =
       job: Job;
       industryLabel: string;
       provider: string;
-      businesses: { id: string; name: string }[];
+      businesses: { id: string; name: string; maskedPhone?: string }[];
     })
   | (CallEvent & { type: "call_status"; status: CallStatus })
   | (CallEvent & { type: "transcript"; line: TranscriptLine })
@@ -64,12 +65,14 @@ function runListenerSafely(listener: EventListener, event: AgentEvent): void {
   try {
     listener(event);
   } catch (error) {
-    console.error(`Event listener failed on "${event.type}":`, error);
+    console.error(`Event listener failed on "${event.type}": ${describeError(error)}`);
   }
 }
 
+// Every event can reach the dashboard and the run log, so phone numbers are masked
+// here, once, and a full number never leaves the provider that dials it.
 export function emit(event: AgentEvent): void {
-  bus.emit(EVENT_CHANNEL, event);
+  bus.emit(EVENT_CHANNEL, maskStrings(event));
 }
 
 export function onEvent(listener: EventListener): () => void {

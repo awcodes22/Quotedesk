@@ -4,4 +4,5 @@ runs/
 dist/
 .DS_Store
 docs/
-data/jobs/hotels-live.json
+# Real phone numbers and private jobs.
+local/

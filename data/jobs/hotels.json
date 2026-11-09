@@ -8,6 +8,11 @@
     "email": "jane.doe@example.com"
   },
   "details": [{ "label": "Dates", "value": "Nov 20 to 22 · 2 nights", "icon": "calendar" }],
+  "stay": {
+    "checkIn": "2026-11-20",
+    "checkOut": "2026-11-22",
+    "beds": "one king bed"
+  },
   "reference": {
     "total": 349,
     "source": "Listed price online"

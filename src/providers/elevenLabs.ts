@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { maskPhoneNumbers } from "../privacy";
 
 export type FetchFunction = typeof fetch;
 
@@ -51,11 +52,6 @@ const conversationSchema = z.object({
   transcript: z.array(turnSchema),
 });
 
-// Error text from the API can echo the number that was dialed, which must never reach a log.
-export function hidePhoneNumbers(text: string): string {
-  return text.replace(/\+?[0-9][0-9 ()-]{6,}[0-9]/g, "[number]");
-}
-
 function buildHeaders(apiKey: string): Record<string, string> {
   return { "xi-api-key": apiKey, "Content-Type": "application/json" };
 }
@@ -69,7 +65,7 @@ async function readFailure(response: Response, action: string): Promise<Error> {
     detail = "";
   }
 
-  const shortDetail = hidePhoneNumbers(detail).slice(0, 200);
+  const shortDetail = maskPhoneNumbers(detail).slice(0, 200);
   return new Error(`ElevenLabs ${action} failed with HTTP ${response.status}: ${shortDetail}`);
 }
 
@@ -101,7 +97,7 @@ export function elevenLabsClient(settings: ElevenLabsSettings): ElevenLabsClient
     const result = outboundCallSchema.parse(await response.json());
 
     if (result.success === false || result.conversation_id === null) {
-      const reason = hidePhoneNumbers(result.message);
+      const reason = maskPhoneNumbers(result.message);
       throw new Error(`ElevenLabs did not start the call: ${reason}`);
     }
 

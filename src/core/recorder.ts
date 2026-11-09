@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { onEvent } from "./events";
+import { describeError } from "../privacy";
 import type { AgentEvent } from "./events";
 
 const SYSTEM_LOG_FILE = "system.jsonl";
@@ -36,7 +37,7 @@ function createThrottledErrorLogger(): (error: unknown) => void {
     }
 
     lastLoggedAt = now;
-    console.error("Recorder failed to write an event:", error);
+    console.error(`Recorder failed to write an event: ${describeError(error)}`);
   }
 
   return logError;

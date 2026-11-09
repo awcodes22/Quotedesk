@@ -53,9 +53,15 @@ function splitNumberList(value: string | undefined): string[] {
 
 // The message never repeats the entry, since these are real phone numbers.
 function phoneNumberList() {
-  const error = "must be comma-separated numbers in E.164 format, such as +15551234567";
+  const error = "must be comma-separated numbers in E.164 format, such as +15555550123";
   const numbers = z.array(z.string().regex(PHONE_NUMBER_PATTERN, { error }));
   return z.string().optional().transform(splitNumberList).pipe(numbers);
+}
+
+function optionalPhoneNumber() {
+  const error = "must be a number in E.164 format, such as +15555550123";
+  const number = z.string().regex(PHONE_NUMBER_PATTERN, { error }).optional();
+  return optionalText().pipe(number);
 }
 
 type OpenAIValues = {
@@ -101,6 +107,8 @@ const configSchema = z
     ELEVENLABS_PHONE_NUMBER_ID: optionalText(),
     LIVE_GUEST_NAME: optionalText(),
     LIVE_ALLOWED_NUMBERS: phoneNumberList(),
+    // Always allowed, so it never has to be repeated in LIVE_ALLOWED_NUMBERS.
+    LIVE_TEST_NUMBER: optionalPhoneNumber(),
     // The ElevenLabs plan allows six calls at once, so the cap can't go higher.
     LIVE_MAX_CALLS: wholeNumber().min(1).max(6).default(6),
     LIVE_CALL_TIMEOUT_MS: wholeNumber().min(1).default(300000),

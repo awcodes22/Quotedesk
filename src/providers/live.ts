@@ -8,6 +8,7 @@ import type {
   Stay,
   TranscriptLine,
 } from "../core/types";
+import { describeError } from "../privacy";
 import type { Conversation, ConversationStatus, ConversationTurn, ElevenLabsClient } from "./elevenLabs";
 import type { Extraction, QuoteExtractor } from "./quoteExtractor";
 import type { CallContext, CallHandle, CallProvider, SpokenLine } from "./types";
@@ -16,6 +17,7 @@ export type LiveLimits = {
   allowedNumbers: string[];
   maxCalls: number;
   callTimeoutMs: number;
+  testNumber?: string;
 };
 
 export type LiveProviderOptions = LiveLimits & {
@@ -79,11 +81,21 @@ function requireStay(job: Job): Stay {
   return job.stay;
 }
 
+function speakDay(isoDay: string): string {
+  const day = readCalendarDay(isoDay);
+  return `${day.month} ${day.day}`;
+}
+
+// A request written for the text callers may hold ISO dates, which would be read out digit by digit.
+export function speakDates(text: string): string {
+  return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, speakDay);
+}
+
 export function buildDynamicVariables(job: Job, guestName: string): Record<string, string> {
   const stay = requireStay(job);
 
   return {
-    request: job.request,
+    request: speakDates(job.request),
     dates: formatStayDates(stay.checkIn, stay.checkOut),
     beds: stay.beds,
     guest_name: guestName,
@@ -191,14 +203,6 @@ function pause(ms: number): Promise<void> {
   });
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
-}
-
 type CallPlan = {
   options: LiveProviderOptions;
   startDelayMs: number;
@@ -238,7 +242,7 @@ class LiveCall {
     try {
       return await this.playCall();
     } catch (error) {
-      return this.fail(getErrorMessage(error));
+      return this.fail(describeError(error));
     }
   }
 
@@ -355,7 +359,7 @@ class LiveCall {
     try {
       extraction = await this.options.extractQuote(lines, this.context.industry);
     } catch (error) {
-      this.context.reportNote(`The price could not be read from the call: ${getErrorMessage(error)}`);
+      this.context.reportNote(`The price could not be read from the call: ${describeError(error)}`);
       return;
     }
 
@@ -387,7 +391,7 @@ class LiveCall {
         return;
       } catch (error) {
         if (attempt === AUDIO_ATTEMPTS) {
-          console.error(`Recording for ${this.context.callId} not saved: ${getErrorMessage(error)}`);
+          console.error(`Recording for ${this.context.callId} not saved: ${describeError(error)}`);
           return;
         }
 

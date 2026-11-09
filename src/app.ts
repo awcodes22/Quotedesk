@@ -11,13 +11,14 @@ import type {
 import { z } from "zod";
 import type { AgentEvent } from "./core/events";
 import type { RunOptions } from "./core/run";
-import type { Job } from "./core/types";
 import { getIndustry } from "./industries/index";
-import { listJobs } from "./jobs";
+import { listAllJobs } from "./jobs";
+import type { ListedJob } from "./jobs";
 import type { FakeProviderOptions } from "./providers/fake";
 import { audioPath } from "./providers/live";
 import type { LiveLimits } from "./providers/live";
 import type { CallProvider } from "./providers/types";
+import { describeError, maskPhoneNumbers, maskStrings } from "./privacy";
 import { MAX_SCALE } from "./scale";
 import { streamLiveEvents, streamRecordedEvents } from "./api/eventStream";
 import { readRecordedEvents } from "./api/registry";
@@ -27,6 +28,7 @@ import { summarizeRun } from "./api/summary";
 
 export type AppOptions = {
   jobsDirectory: string;
+  privateJobsDirectory?: string;
   runsDirectory: string;
   publicDirectory: string;
   runOptions: RunOptions;
@@ -40,6 +42,7 @@ const startRunSchema = z.strictObject({
   jobId: z.string().min(1),
   provider: z.enum(["fake", "text", "live"]),
   scale: z.number().int().min(1).max(MAX_SCALE).optional(),
+  testCall: z.boolean().optional(),
 });
 
 // Run and call ids become file names, so anything that could leave the runs folder is refused.
@@ -51,12 +54,19 @@ type ListingLimits = {
   maxTurns: number;
 };
 
-function buildJobListing(job: Job, limits: ListingLimits) {
+// Only the fields the dashboard needs, so a private job's phone numbers never leave the server.
+function buildJobListing(listed: ListedJob, limits: ListingLimits) {
+  const { job, isPrivate } = listed;
   const industry = getIndustry(job.industryId);
   let businessCount = industry.simBusinesses.length;
+  let title = job.title;
 
   if (job.businessIds !== undefined && job.businessIds.length > 0) {
     businessCount = new Set(job.businessIds).size;
+  }
+
+  if (isPrivate) {
+    title = `${job.title} (private)`;
   }
 
   let contactName: string | null = null;
@@ -67,7 +77,8 @@ function buildJobListing(job: Job, limits: ListingLimits) {
 
   return {
     id: job.id,
-    title: job.title,
+    title,
+    isPrivate,
     request: job.request,
     industry: {
       id: industry.id,
@@ -86,7 +97,12 @@ function buildJobListing(job: Job, limits: ListingLimits) {
 }
 
 function sendError(response: Response, status: number, error: string): void {
-  response.status(status).json({ error });
+  response.status(status).json({ error: maskPhoneNumbers(error) });
+}
+
+// The last line of defence: nothing the browser receives carries a full phone number.
+function sendJson(response: Response, status: number, body: unknown): void {
+  response.status(status).json(maskStrings(body));
 }
 
 function readRunId(request: Request, response: Response): string | undefined {
@@ -117,14 +133,21 @@ function buildApiRouter(options: AppOptions): Router {
   const router = express.Router();
 
   function handleListJobs(_request: Request, response: Response): void {
-    const jobs = listJobs(options.jobsDirectory);
+    const jobs = listAllJobs(options.jobsDirectory, options.privateJobsDirectory);
     // The head agent decides by the run timeout at the latest, so that is the promise shown.
     const limits = {
       decideWithinMs: options.runOptions.runTimeoutMs,
       maxTurns: options.maxTurns,
     };
-    const listings = jobs.map((job) => buildJobListing(job, limits));
-    response.json({ jobs: listings });
+    const listings = jobs.map((listed) => buildJobListing(listed, limits));
+    let liveTestCall = false;
+
+    // The browser only learns that a test number exists, never the number itself.
+    if (options.liveLimits !== undefined && options.liveLimits.testNumber !== undefined) {
+      liveTestCall = true;
+    }
+
+    sendJson(response, 200, { jobs: listings, liveTestCall });
   }
 
   async function handleStartRun(
@@ -145,7 +168,7 @@ function buildApiRouter(options: AppOptions): Router {
       return;
     }
 
-    response.status(201).json({ runId: result.runId });
+    sendJson(response, 201, { runId: result.runId });
   }
 
   function handleRunEvents(request: Request, response: Response): void {
@@ -192,7 +215,7 @@ function buildApiRouter(options: AppOptions): Router {
       return;
     }
 
-    response.json(summary);
+    sendJson(response, 200, summary);
   }
 
   function handleCallAudio(request: Request, response: Response): void {
@@ -273,7 +296,7 @@ function handleError(
     return;
   }
 
-  console.error("Request failed:", error);
+  console.error(`Request failed: ${describeError(error)}`);
   sendError(response, 500, "Something went wrong.");
 }
 

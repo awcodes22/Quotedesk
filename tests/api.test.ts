@@ -148,12 +148,9 @@ describe("GET /api/jobs", () => {
 
     const response = await request(app).get("/api/jobs");
 
-    // The private live job is gitignored, so it may or may not sit next to the committed ones.
-    const ids: string[] = response.body.jobs.map((job: { id: string }) => job.id);
-    const committedIds = ids.filter((id) => id !== "toronto-weekend-live");
-
     expect(response.status).toBe(200);
-    expect(committedIds).toEqual(["airport-rental", "toronto-weekend"]);
+    expect(response.body.jobs).toHaveLength(2);
+    expect(response.body.liveTestCall).toBe(false);
     expect(response.body.jobs[0]).toMatchObject({
       id: "airport-rental",
       title: "3-day airport rental",
