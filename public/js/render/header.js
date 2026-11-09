@@ -42,15 +42,26 @@ function findIconName(name) {
  * @returns {RequestField[]}
  */
 export function buildRequestFields(job, industryLabel, callCount, listing, selfTestRun = false) {
-  const noun = findBusinessNoun(listing);
+  // A run from the new quote wizard has no job file; its details already say what the stay is.
+  const isStayRun = job.callBrief !== undefined;
+  let noun = findBusinessNoun(listing);
   let calling = pluralize(callCount, noun.singular, noun.plural);
+
+  if (isStayRun) {
+    noun = { singular: "hotel", plural: "hotels" };
+    calling = pluralize(callCount, noun.singular, noun.plural);
+  }
 
   if (selfTestRun) {
     calling = "Test call";
   }
 
   /** @type {RequestField[]} */
-  const fields = [{ icon: "search", label: "Looking for", value: industryLabel }];
+  const fields = [];
+
+  if (isStayRun === false) {
+    fields.push({ icon: "search", label: "Looking for", value: industryLabel });
+  }
 
   if (job.details !== undefined) {
     for (const detail of job.details) {

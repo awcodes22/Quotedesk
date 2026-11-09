@@ -303,6 +303,10 @@ function createCallContext(
     emit({ type: "note", runId, at: Date.now(), callId, businessId, text });
   }
 
+  function reportBrief(variables: Record<string, string>): void {
+    emit({ type: "call_brief", runId, at: Date.now(), callId, businessId, variables });
+  }
+
   function onTranscript(spoken: SpokenLine): void {
     const at = Date.now();
     let spokenAt = at;
@@ -323,6 +327,7 @@ function createCallContext(
     business,
     reportQuote: (raw) => handleQuote(run, callId, businessId, raw),
     reportNote,
+    reportBrief,
     onStatus: (status) => emitCallStatus(runId, callId, businessId, status),
     onTranscript,
   };

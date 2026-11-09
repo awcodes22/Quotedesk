@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>New quote · QuoteDesk</title>
+    <link rel="stylesheet" href="/css/flow.css" />
+    <script type="module" src="/js/flow/wizard.js"></script>
+  </head>
+  <body class="flow">
+    <div class="wizard">
+      <aside class="wizard-side" aria-label="Quote steps">
+        <a class="logo" href="/">QuoteDesk</a>
+        <div>
+          <span class="eyebrow">New quote</span>
+          <ol id="side-steps" class="side-steps"></ol>
+        </div>
+        <div id="side-summary" class="side-summary"></div>
+      </aside>
+      <main class="wizard-main">
+        <header class="wizard-top">
+          <button id="back" class="btn-link back-button" type="button">Back</button>
+          <a id="close" class="btn-round" href="/" aria-label="Close and go home"></a>
+        </header>
+        <section id="step" class="wizard-body"></section>
+        <footer class="wizard-foot">
+          <button id="continue" class="btn btn-primary" type="button">Continue</button>
+        </footer>
+      </main>
+    </div>
+    <div id="confirm" class="modal-backdrop" hidden></div>
+  </body>
+</html>

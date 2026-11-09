@@ -66,6 +66,16 @@ export type Job = {
   liveBusinesses?: LiveBusiness[];
   // Set by the server for live runs from LIVE_GUEST_NAME, the name the caller gives.
   guestName?: string;
+  // What the agent says on a run built from the new quote wizard.
+  callBrief?: CallBrief;
+};
+
+// The sentences the agent says about the stay, ready to send as dynamic variables.
+export type CallBrief = {
+  request: string;
+  dates: string;
+  askAbout: string;
+  guestName: string;
 };
 
 export type PriceCheckRow = {
@@ -136,6 +146,8 @@ export type SimBusiness = {
   phone?: string;
   // Set only for a number typed in on the dashboard for one test call.
   selfTest?: boolean;
+  // A test call can use the real hotel script ("live") or the guided tutorial ("test").
+  callMode?: "live" | "test";
   // Picked on the dashboard for this run, so it skips LIVE_ALLOWED_NUMBERS.
   approvedForRun?: boolean;
   // A hotel found through Google Places. Its listing is public and is shown in full.

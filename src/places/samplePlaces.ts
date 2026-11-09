@@ -1,5 +1,5 @@
 import { parsePlaces } from "./googlePlaces";
-import type { PlaceHotel, PlacesProvider } from "./googlePlaces";
+import type { AreaSuggestion, PlaceHotel, PlacesProvider } from "./googlePlaces";
 
 // Made-up hotels with numbers reserved for fiction (555-0100 to 555-0199), shaped like a real
 // Places response so they go through the same parsing and filtering. Two are dropped on purpose:
@@ -98,11 +98,31 @@ const SAMPLE_RESPONSE = {
 
 export const SAMPLE_HOTELS: PlaceHotel[] = parsePlaces(SAMPLE_RESPONSE);
 
-// The same sample list for every query, since it only stands in until a key is set.
+// Places people type into "City or area", so the wizard can be tried without a key.
+const SAMPLE_AREAS: AreaSuggestion[] = [
+  { text: "Downtown Toronto, Toronto, ON, Canada", main: "Downtown Toronto", secondary: "Toronto, ON, Canada" },
+  { text: "Toronto, ON, Canada", main: "Toronto", secondary: "ON, Canada" },
+  { text: "Montreal, QC, Canada", main: "Montreal", secondary: "QC, Canada" },
+  { text: "Vancouver, BC, Canada", main: "Vancouver", secondary: "BC, Canada" },
+  { text: "Ottawa, ON, Canada", main: "Ottawa", secondary: "ON, Canada" },
+  { text: "New York, NY, USA", main: "New York", secondary: "NY, USA" },
+  { text: "Chicago, IL, USA", main: "Chicago", secondary: "IL, USA" },
+  { text: "Boston, MA, USA", main: "Boston", secondary: "MA, USA" },
+];
+
+const MAX_SUGGESTIONS = 5;
+
+// The same sample hotels for every query, since they only stand in until a key is set.
 export function samplePlacesProvider(): PlacesProvider {
   async function search(): Promise<PlaceHotel[]> {
     return SAMPLE_HOTELS;
   }
 
-  return { name: "sample", search };
+  async function autocomplete(input: string): Promise<AreaSuggestion[]> {
+    const typed = input.trim().toLowerCase();
+    const matches = SAMPLE_AREAS.filter((area) => area.text.toLowerCase().includes(typed));
+    return matches.slice(0, MAX_SUGGESTIONS);
+  }
+
+  return { name: "sample", search, autocomplete };
 }

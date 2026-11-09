@@ -15,13 +15,22 @@ export type PlaceHotel = {
   tollFree: boolean;
 };
 
+export type AreaSuggestion = {
+  text: string;
+  main: string;
+  secondary: string;
+};
+
 export type PlacesProvider = {
   // "sample" means Google Places isn't set up and the hotels are made up.
   name: "google" | "sample";
   search: (query: string) => Promise<PlaceHotel[]>;
+  autocomplete: (input: string) => Promise<AreaSuggestion[]>;
 };
 
 export const SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
+export const AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete";
+export const AUTOCOMPLETE_FIELD_MASK = "suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat";
 export const MAX_RESULTS = 20;
 
 // Only what the dashboard shows, which also keeps each search in the cheaper billing tier.
@@ -176,6 +185,62 @@ export function buildSearchBody(query: string): Record<string, unknown> {
   };
 }
 
+// "(regions)" covers cities, neighbourhoods and areas, which is what "City or area" asks for.
+export function buildAutocompleteBody(input: string): Record<string, unknown> {
+  return { input, includedPrimaryTypes: ["(regions)"] };
+}
+
+const suggestionSchema = z.object({
+  placePrediction: z
+    .object({
+      text: z.object({ text: z.string() }),
+      structuredFormat: z
+        .object({
+          mainText: z.object({ text: z.string() }),
+          secondaryText: z.object({ text: z.string() }).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+const autocompleteResponseSchema = z.object({
+  suggestions: z.array(suggestionSchema).optional(),
+});
+
+const MAX_SUGGESTIONS = 5;
+
+export function parseSuggestions(raw: unknown): AreaSuggestion[] {
+  const response = autocompleteResponseSchema.parse(raw);
+  const suggestions: AreaSuggestion[] = [];
+  let items: z.infer<typeof suggestionSchema>[] = [];
+
+  if (response.suggestions !== undefined) {
+    items = response.suggestions;
+  }
+
+  for (const item of items) {
+    const prediction = item.placePrediction;
+
+    if (prediction !== undefined) {
+      let main = prediction.text.text;
+      let secondary = "";
+
+      if (prediction.structuredFormat !== undefined) {
+        main = prediction.structuredFormat.mainText.text;
+
+        if (prediction.structuredFormat.secondaryText !== undefined) {
+          secondary = prediction.structuredFormat.secondaryText.text;
+        }
+      }
+
+      suggestions.push({ text: prediction.text.text, main, secondary });
+    }
+  }
+
+  return suggestions.slice(0, MAX_SUGGESTIONS);
+}
+
 async function readErrorStatus(response: Response): Promise<string | undefined> {
   try {
     const parsed = errorResponseSchema.safeParse(await response.json());
@@ -219,15 +284,15 @@ export function googlePlacesProvider(settings: GooglePlacesSettings): PlacesProv
     throw new Error("GOOGLE_PLACES_API_KEY is not set.");
   }
 
-  async function search(query: string): Promise<PlaceHotel[]> {
-    const response = await settings.fetch(SEARCH_URL, {
+  async function post(url: string, fieldMask: string, body: Record<string, unknown>): Promise<unknown> {
+    const response = await settings.fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": String(apiKey),
-        "X-Goog-FieldMask": FIELD_MASK,
+        "X-Goog-FieldMask": fieldMask,
       },
-      body: JSON.stringify(buildSearchBody(query)),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
@@ -235,8 +300,16 @@ export function googlePlacesProvider(settings: GooglePlacesSettings): PlacesProv
       throw await describeFailure(response);
     }
 
-    return parsePlaces(await response.json());
+    return response.json();
   }
 
-  return { name: "google", search };
+  async function search(query: string): Promise<PlaceHotel[]> {
+    return parsePlaces(await post(SEARCH_URL, FIELD_MASK, buildSearchBody(query)));
+  }
+
+  async function autocomplete(input: string): Promise<AreaSuggestion[]> {
+    return parseSuggestions(await post(AUTOCOMPLETE_URL, AUTOCOMPLETE_FIELD_MASK, buildAutocompleteBody(input)));
+  }
+
+  return { name: "google", search, autocomplete };
 }

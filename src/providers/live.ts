@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
+  CallBrief,
   CallOutcome,
   Job,
   LiveBusiness,
@@ -9,6 +10,12 @@ import type {
   TranscriptLine,
 } from "../core/types";
 import { describeError } from "../privacy";
+import {
+  ASK_ABOUT,
+  buildDatesSentence,
+  formatSpokenDay,
+  formatStayDates,
+} from "../../public/js/stay.js";
 import type { Conversation, ConversationStatus, ConversationTurn, ElevenLabsClient } from "./elevenLabs";
 import type { Extraction, QuoteExtractor } from "./quoteExtractor";
 import type { CallContext, CallHandle, CallProvider, SpokenLine } from "./types";
@@ -41,40 +48,8 @@ const WRAP_UP_MS = 60_000;
 const MAX_POLL_ERRORS = 3;
 const AUDIO_ATTEMPTS = 3;
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-type CalendarDay = {
-  month: string;
-  day: number;
-};
-
-function readCalendarDay(isoDay: string): CalendarDay {
-  const parts = isoDay.split("-");
-  const monthNumber = Number(parts[1]);
-  const day = Number(parts[2]);
-  const month = MONTHS[monthNumber - 1];
-
-  if (month === undefined || Number.isInteger(day) === false) {
-    throw new Error(`"${isoDay}" is not a date like 2026-11-20.`);
-  }
-
-  return { month, day };
-}
-
-// The caller reads this out loud, so it must sound like speech, never like 2026-11-20.
-export function formatStayDates(checkIn: string, checkOut: string): string {
-  const start = readCalendarDay(checkIn);
-  const end = readCalendarDay(checkOut);
-
-  if (start.month === end.month) {
-    return `${start.month} ${start.day} to ${end.day}`;
-  }
-
-  return `${start.month} ${start.day} to ${end.month} ${end.day}`;
-}
+// Re-exported so job runs and wizard runs say dates the same way.
+export { formatStayDates };
 
 function requireStay(job: Job): Stay {
   if (job.stay === undefined) {
@@ -84,14 +59,9 @@ function requireStay(job: Job): Stay {
   return job.stay;
 }
 
-function speakDay(isoDay: string): string {
-  const day = readCalendarDay(isoDay);
-  return `${day.month} ${day.day}`;
-}
-
 // A request written for the text callers may hold ISO dates, which would be read out digit by digit.
 export function speakDates(text: string): string {
-  return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, speakDay);
+  return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, formatSpokenDay);
 }
 
 export type CallMode = "test" | "live";
@@ -104,6 +74,10 @@ export const FIRST_MESSAGE_INTROS: Record<CallMode, string> = {
 };
 
 export function findCallMode(business: SimBusiness): CallMode {
+  if (business.callMode !== undefined) {
+    return business.callMode;
+  }
+
   if (business.selfTest === true) {
     return "test";
   }
@@ -111,18 +85,52 @@ export function findCallMode(business: SimBusiness): CallMode {
   return "live";
 }
 
+// The variables the call panel shows. The opening line is left out because it is the same on every call.
+export const BRIEF_SHOWN = ["request", "dates", "ask_about", "guest_name", "call_mode"];
+
+export function pickBriefShown(variables: Record<string, string>): Record<string, string> {
+  const shown: Record<string, string> = {};
+
+  for (const key of BRIEF_SHOWN) {
+    const value = variables[key];
+
+    if (value !== undefined) {
+      shown[key] = value;
+    }
+  }
+
+  return shown;
+}
+
+// A wizard run brings its own sentences; a job run builds them from the job file.
+function findCallBrief(job: Job, guestName: string): CallBrief {
+  if (job.callBrief !== undefined) {
+    return job.callBrief;
+  }
+
+  const stay = requireStay(job);
+
+  return {
+    request: speakDates(job.request),
+    dates: buildDatesSentence(stay.checkIn, stay.checkOut),
+    askAbout: ASK_ABOUT,
+    guestName,
+  };
+}
+
+// Only what the agent may say out loud.
 export function buildDynamicVariables(
   job: Job,
   guestName: string,
   callMode: CallMode,
 ): Record<string, string> {
-  const stay = requireStay(job);
+  const brief = findCallBrief(job, guestName);
 
   return {
-    request: speakDates(job.request),
-    dates: formatStayDates(stay.checkIn, stay.checkOut),
-    beds: stay.beds,
-    guest_name: guestName,
+    request: brief.request,
+    dates: brief.dates,
+    ask_about: brief.askAbout,
+    guest_name: brief.guestName,
     call_mode: callMode,
     first_message_intro: FIRST_MESSAGE_INTROS[callMode],
   };
@@ -281,6 +289,7 @@ class LiveCall {
 
     const conversationId = await this.options.client.startOutboundCall(phone, variables);
     this.dialedAt = Date.now();
+    this.context.reportBrief(pickBriefShown(variables));
     this.context.onStatus("connecting");
 
     const conversation = await this.waitForEnd(conversationId);

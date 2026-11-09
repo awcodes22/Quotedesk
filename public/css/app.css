@@ -448,6 +448,32 @@ p {
   color: var(--live);
 }
 
+/* ---------- What the agent was told ---------- */
+
+.brief-card[hidden] {
+  display: none;
+}
+
+.brief-card summary {
+  cursor: pointer;
+}
+
+.brief-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 10px 0 0;
+  font-size: var(--text-sm);
+}
+
+.brief-list dt {
+  color: var(--text-2);
+}
+
+.brief-list dd {
+  margin: 0;
+}
+
 .empty-state {
   margin: auto;
   color: var(--text-2);

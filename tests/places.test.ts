@@ -24,7 +24,7 @@ import {
   parsePlaces,
   SEARCH_URL,
 } from "../src/places/googlePlaces";
-import type { FetchFunction, PlaceHotel, PlacesProvider } from "../src/places/googlePlaces";
+import type { AreaSuggestion, FetchFunction, PlaceHotel, PlacesProvider } from "../src/places/googlePlaces";
 import { PlacesDirectory, PLACE_CACHE_MS, SEARCH_CACHE_MS, SEARCHES_PER_HOUR } from "../src/places/placesDirectory";
 import { SAMPLE_HOTELS, samplePlacesProvider } from "../src/places/samplePlaces";
 import { elevenLabsClient } from "../src/providers/elevenLabs";
@@ -229,7 +229,11 @@ function countingProvider(): { provider: PlacesProvider; calls: string[] } {
     return SAMPLE_HOTELS;
   }
 
-  return { provider: { name: "google", search }, calls };
+  async function autocomplete(): Promise<AreaSuggestion[]> {
+    return [];
+  }
+
+  return { provider: { name: "google", search, autocomplete }, calls };
 }
 
 describe("places directory", () => {

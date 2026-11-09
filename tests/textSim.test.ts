@@ -216,6 +216,7 @@ function buildCallContext(): CallContext {
     business: getBusiness("harbour-inn"),
     reportQuote: () => ({ ok: false, error: "Not used" }),
     reportNote: () => {},
+    reportBrief: () => {},
     onStatus: () => {},
     onTranscript: () => {},
   };

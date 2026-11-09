@@ -148,6 +148,8 @@ function describeEvent(event: AgentEvent, names: BusinessNames): string {
       return `Quote: $${event.quote.total}`;
     case "note":
       return `Note: ${event.text}`;
+    case "call_brief":
+      return `Told the agent: ${event.variables.request}`;
     case "decision":
       return describeDecision(event.decision, names);
     case "decision_pushed":

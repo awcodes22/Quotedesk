@@ -44,6 +44,8 @@ export type AgentEvent =
   | (CallEvent & { type: "transcript"; line: TranscriptLine })
   | (CallEvent & { type: "quote"; quote: Quote })
   | (CallEvent & { type: "note"; text: string })
+  // What the agent was told for this call, shown in the call panel. Never the budget or a phone number.
+  | (CallEvent & { type: "call_brief"; variables: Record<string, string> })
   | (RunEvent & DecisionDeadline & { type: "decision_scheduled" })
   | (RunEvent & { type: "decision"; decision: Decision })
   | (CallEvent & {

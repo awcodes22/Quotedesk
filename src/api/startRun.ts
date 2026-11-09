@@ -14,15 +14,20 @@ import type { CallProvider } from "../providers/types";
 import type { PlaceHotel } from "../places/googlePlaces";
 import type { PlacesDirectory } from "../places/placesDirectory";
 import { scaleRun } from "../scale";
+import { parseStay, stayToJob } from "../stay";
 import { readSelfTestNumber, SELF_TEST_NAME } from "./selfTest";
 import type { LimiterResult, SelfTestLimiter } from "./selfTest";
 
 export type StartRunRequest = {
-  jobId: string;
+  // A job file, or a stay described in the new quote wizard. One of the two is needed.
+  jobId?: string;
+  stay?: unknown;
   provider: string;
   scale?: number;
   // Typed on the dashboard for one test call; held in memory only and never logged.
   testNumber?: string;
+  // How a test call talks: the real hotel script ("live") or the guided tutorial ("test", the default).
+  testCallMode?: "live" | "test";
   // Hotels picked from a Places search; the server looks them up in its own cache.
   placeIds?: string[];
 };
@@ -136,7 +141,11 @@ function prepareRun(
 }
 
 // The number was typed on the dashboard and lives only in this call's memory, never in the job.
-function pickSelfTestCall(testNumber: string, limits: LiveLimits): SimBusiness[] | string {
+function pickSelfTestCall(
+  testNumber: string,
+  callMode: "live" | "test",
+  limits: LiveLimits,
+): SimBusiness[] | string {
   if (limits.selfTest !== true) {
     return "Test calls are turned off on this server (LIVE_SELF_TEST=false).";
   }
@@ -155,6 +164,7 @@ function pickSelfTestCall(testNumber: string, limits: LiveLimits): SimBusiness[]
       fakeQuotes: [],
       phone: parsed.phone,
       selfTest: true,
+      callMode,
     },
   ];
 }
@@ -241,7 +251,13 @@ function pickLiveCalls(
   }
 
   if (request.testNumber !== undefined) {
-    return pickSelfTestCall(request.testNumber, limits);
+    let callMode: "live" | "test" = "test";
+
+    if (request.testCallMode !== undefined) {
+      callMode = request.testCallMode;
+    }
+
+    return pickSelfTestCall(request.testNumber, callMode, limits);
   }
 
   if (request.placeIds !== undefined) {
@@ -300,6 +316,10 @@ function prepareAnyRun(
     return "A test call only works in Live call mode.";
   }
 
+  if (request.testCallMode !== undefined && request.testNumber === undefined) {
+    return "A call mode only applies to a test call.";
+  }
+
   if (request.placeIds !== undefined && request.provider !== "live") {
     return "Picked hotels only work in Live call mode.";
   }
@@ -316,14 +336,58 @@ function prepareAnyRun(
 }
 
 // Every run is for LIVE_GUEST_NAME when it is set, so the header names the same guest in every mode.
+// A wizard run already carries the name typed in the wizard, or none, so it is left alone.
 function withGuestName(job: Job, settings: StartRunSettings): Job {
   const limits = settings.liveLimits;
 
-  if (limits === undefined || limits.guestName === undefined) {
+  if (job.callBrief !== undefined || limits === undefined || limits.guestName === undefined) {
     return job;
   }
 
   return { ...job, guestName: limits.guestName };
+}
+
+type FoundJob = { ok: true; listed: ListedJob } | { ok: false; status: 400 | 404; error: string };
+
+// A wizard stay only ever calls hotels picked from Places or a test number, so it needs one of them.
+function findStayJob(request: StartRunRequest): FoundJob {
+  if (request.provider !== "live") {
+    return { ok: false, status: 400, error: "A stay from the new quote wizard only works for live calls." };
+  }
+
+  if (request.placeIds === undefined && request.testNumber === undefined) {
+    return { ok: false, status: 400, error: "Pick at least one hotel to call." };
+  }
+
+  const parsed = parseStay(request.stay);
+
+  if (parsed.ok === false) {
+    return { ok: false, status: 400, error: parsed.error };
+  }
+
+  return { ok: true, listed: { job: stayToJob(parsed.stay), isPrivate: false } };
+}
+
+function findRunJob(request: StartRunRequest, settings: StartRunSettings): FoundJob {
+  if (request.stay !== undefined && request.jobId !== undefined) {
+    return { ok: false, status: 400, error: "Send a job or a stay, not both." };
+  }
+
+  if (request.stay !== undefined) {
+    return findStayJob(request);
+  }
+
+  if (request.jobId === undefined) {
+    return { ok: false, status: 400, error: "Pick a job or describe a stay." };
+  }
+
+  const listed = findJob(settings, request.jobId);
+
+  if (listed === undefined) {
+    return { ok: false, status: 404, error: `Unknown job "${request.jobId}".` };
+  }
+
+  return { ok: true, listed };
 }
 
 function takeSelfTestSlot(settings: StartRunSettings): LimiterResult {
@@ -342,11 +406,13 @@ export async function startRun(
     return { ok: false, status: 409, error: "A run is already in progress." };
   }
 
-  const listed = findJob(settings, request.jobId);
+  const found = findRunJob(request, settings);
 
-  if (listed === undefined) {
-    return { ok: false, status: 404, error: `Unknown job "${request.jobId}".` };
+  if (found.ok === false) {
+    return { ok: false, status: found.status, error: found.error };
   }
+
+  const listed = found.listed;
 
   // A missing key is the first thing to fix, so it is reported before any job problem.
   if (request.provider === "live") {

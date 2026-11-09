@@ -26,6 +26,7 @@ import type { RunRegistry } from "./api/registry";
 import { SelfTestLimiter } from "./api/selfTest";
 import { PlacesDirectory } from "./places/placesDirectory";
 import { samplePlacesProvider } from "./places/samplePlaces";
+import { listPastRuns } from "./api/pastRuns";
 import { startRun } from "./api/startRun";
 import { summarizeRun } from "./api/summary";
 
@@ -44,16 +45,23 @@ export type AppOptions = {
 };
 
 // zod's messages for these fields never repeat the value, so a typed number can't leak through them.
+// The stay is checked in full by startRun, which knows today's date.
 const startRunSchema = z.strictObject({
-  jobId: z.string().min(1),
+  jobId: z.string().min(1).optional(),
+  stay: z.record(z.string(), z.unknown()).optional(),
   provider: z.enum(["fake", "text", "live"]),
   scale: z.number().int().min(1).max(MAX_SCALE).optional(),
   testNumber: z.string().min(1).max(40).optional(),
+  testCallMode: z.enum(["live", "test"]).optional(),
   placeIds: z.array(z.string().min(1).max(300)).min(1).max(20).optional(),
 });
 
 const placesSearchSchema = z.strictObject({
   query: z.string().min(1).max(200),
+});
+
+const autocompleteSchema = z.strictObject({
+  input: z.string().max(200),
 });
 
 // Run and call ids become file names, so anything that could leave the runs folder is refused.
@@ -301,7 +309,31 @@ function buildApiRouter(options: AppOptions): Router {
     response.status(200).json({ sample: result.sample, hotels: result.hotels });
   }
 
+  async function handleAutocomplete(request: Request, response: Response): Promise<void> {
+    const parsed = autocompleteSchema.safeParse(request.body);
+
+    if (parsed.success === false) {
+      sendError(response, 400, z.prettifyError(parsed.error));
+      return;
+    }
+
+    const result = await placesDirectory.autocomplete(parsed.data.input);
+
+    if (result.ok === false) {
+      sendError(response, result.status, result.error);
+      return;
+    }
+
+    sendJson(response, 200, { sample: result.sample, suggestions: result.suggestions });
+  }
+
+  function handleListRuns(_request: Request, response: Response): void {
+    sendJson(response, 200, { runs: listPastRuns(options.runsDirectory) });
+  }
+
   router.post("/places/search", handleSearchPlaces);
+  router.post("/places/autocomplete", handleAutocomplete);
+  router.get("/runs", handleListRuns);
   router.post("/runs", handleStartRun);
   router.get("/runs/:id/events", handleRunEvents);
   router.get("/runs/:id/summary", handleRunSummary);
@@ -364,6 +396,10 @@ export function createApp(options: AppOptions): Express {
   app.use(express.json());
   app.get("/health", handleHealthCheck);
   app.use("/api", buildApiRouter(options));
+  app.get("/", servePage(options.publicDirectory, "home.html"));
+  app.get("/new", servePage(options.publicDirectory, "new.html"));
+  // The job-based dashboard stays reachable for Demo and Chats runs.
+  app.get("/demo", servePage(options.publicDirectory, "index.html"));
   app.get("/runs/:id", servePage(options.publicDirectory, "index.html"));
   app.get(
     "/runs/:id/breakdown",

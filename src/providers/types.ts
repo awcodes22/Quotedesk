@@ -20,6 +20,7 @@ export type CallContext = {
   business: SimBusiness;
   reportQuote: (raw: unknown) => ReportResult;
   reportNote: (text: string) => void;
+  reportBrief: (variables: Record<string, string>) => void;
   onStatus: (status: CallStatus) => void;
   onTranscript: (line: SpokenLine) => void;
 };

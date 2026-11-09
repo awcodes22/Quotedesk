@@ -28,6 +28,7 @@
  *   name: string,
  *   maskedPhone: string | null,
  *   listing: import("../../src/core/types").PublicListing | null,
+ *   brief: Record<string, string> | null,
  *   status: CallStatus,
  *   quote: Quote | null,
  *   firstQuote: Quote | null,
@@ -153,6 +154,7 @@ function createCall(business) {
     name: business.name,
     maskedPhone,
     listing,
+    brief: null,
     status: "queued",
     quote: null,
     firstQuote: null,
@@ -355,6 +357,8 @@ function applyRunEvent(state, event) {
       return updateCall(state, event.callId, (call) =>
         addQuote(call, event.quote),
       );
+    case "call_brief":
+      return updateCall(state, event.callId, (call) => ({ ...call, brief: event.variables }));
     case "note":
       return updateCall(state, event.callId, (call) =>
         addNote(call, event.text),

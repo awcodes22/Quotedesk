@@ -61,6 +61,7 @@ type CallLog = {
   lines: SpokenLine[];
   notes: string[];
   quotes: unknown[];
+  briefs: Record<string, string>[];
 };
 
 const tempDirectories: string[] = [];
@@ -210,13 +211,14 @@ function buildContext(business: SimBusiness, log: CallLog): CallContext {
       return { ok: true, quote: { callId: "", businessId: "", total: 0, fields: { total: 0 }, receivedAt: 0 } };
     },
     reportNote: (text) => log.notes.push(text),
+    reportBrief: (variables) => log.briefs.push(variables),
     onStatus: (status) => log.statuses.push(status),
     onTranscript: (line) => log.lines.push(line),
   };
 }
 
 function createLog(): CallLog {
-  return { statuses: [], lines: [], notes: [], quotes: [] };
+  return { statuses: [], lines: [], notes: [], quotes: [], briefs: [] };
 }
 
 // Moves fake time forward until the promise settles, so polling and spacing run instantly.
@@ -267,8 +269,8 @@ describe("buildDynamicVariables", () => {
 
     expect(variables).toEqual({
       request: "a room for 2 guests for 2 nights",
-      dates: "November 20 to 22",
-      beds: "one king bed",
+      dates: "November 20 to 22, 2 nights",
+      ask_about: "free cancellation, whether breakfast is included, and whether there's a lower rate available",
       guest_name: "Jane Doe",
       call_mode: "live",
       first_message_intro: FIRST_MESSAGE_INTROS.live,
@@ -394,8 +396,8 @@ describe("live provider", () => {
       conversation_initiation_client_data: {
         dynamic_variables: {
           request: "a room for 2 guests for 2 nights",
-          dates: "November 20 to 22",
-          beds: "one king bed",
+          dates: "November 20 to 22, 2 nights",
+          ask_about: "free cancellation, whether breakfast is included, and whether there's a lower rate available",
           guest_name: "Jane Doe",
           call_mode: "live",
           first_message_intro: FIRST_MESSAGE_INTROS.live,

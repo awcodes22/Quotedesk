@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QuoteDesk</title>
+    <link rel="stylesheet" href="/css/flow.css" />
+    <script type="module" src="/js/flow/home.js"></script>
+  </head>
+  <body class="flow">
+    <header class="flow-top">
+      <a class="logo" href="/">QuoteDesk</a>
+      <nav class="flow-nav" aria-label="Main">
+        <a href="#how">How it works</a>
+        <button id="past-toggle" type="button">Past quotes</button>
+        <a class="demo-link" href="/demo">Demo</a>
+      </nav>
+    </header>
+    <main class="home">
+      <section class="hero">
+        <span class="eyebrow">Hotel quotes by phone</span>
+        <h1>Real hotel prices, without the phone calls.</h1>
+        <p class="hero-sub">An AI calls the hotels you pick at the same time and brings back the best rate.</p>
+        <a class="btn btn-primary" href="/new">Get hotel quotes</a>
+      </section>
+      <section id="past" class="card past-card" aria-label="Past quotes" hidden></section>
+      <section class="home-cards">
+        <div id="try" class="card try-card" aria-label="Try it on yourself"></div>
+        <div id="how" class="card how-card">
+          <h2 class="card-title">How it works</h2>
+          <ol class="how-steps">
+            <li class="how-step">
+              <span class="how-number">1</span>
+              <div>
+                <strong>Tell us your stay</strong>
+                <span class="muted">Where, when, the room, and anything you need asked.</span>
+              </div>
+            </li>
+            <li class="how-step">
+              <span class="how-number">2</span>
+              <div>
+                <strong>Pick the hotels</strong>
+                <span class="muted">Choose up to six from the area, with ratings and prices.</span>
+              </div>
+            </li>
+            <li class="how-step">
+              <span class="how-number">3</span>
+              <div>
+                <strong>We call and compare</strong>
+                <span class="muted">Every call happens at once, and the best quote is picked for you.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

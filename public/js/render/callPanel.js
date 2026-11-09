@@ -9,7 +9,12 @@ import {
   initials,
   labelFromKey,
 } from "../format.js";
-import { isSelfTestCall, selectGettingThrough, selectOutcomeLabel, selectRanking } from "../state.js";
+import {
+  isSelfTestCall,
+  selectGettingThrough,
+  selectOutcomeLabel,
+  selectRanking,
+} from "../state.js";
 import {
   callElapsedMs,
   describeCallStatus,
@@ -64,7 +69,9 @@ import {
  *   agentSentence: string,
  *   transcript: TranscriptModel,
  *   info: InfoCardModel | null,
+ *   brief: BriefRow[] | null,
  * }} CallPanelModel
+ * @typedef {{ label: string, value: string }} BriefRow
  * @typedef {{
  *   name: string,
  *   address: string,
@@ -580,6 +587,7 @@ export function selectCallPanelModel(view, call) {
     agentSentence: describeStanding(view, call, ranking),
     transcript: buildTranscript(view, call),
     info: buildInfoCard(call),
+    brief: buildBriefRows(view, call),
   };
 }
 
@@ -636,6 +644,74 @@ function renderInfoCard(card, model) {
       ]),
     );
   }
+}
+
+// Only these are shown, in this order. The budget and any phone number are never among them.
+const BRIEF_LABELS = [
+  { key: "request", label: "Request" },
+  { key: "dates", label: "Dates" },
+  { key: "ask_about", label: "Asks about" },
+  { key: "guest_name", label: "Guest name" },
+  { key: "call_mode", label: "Call mode" },
+];
+
+/** @type {Record<string, string>} */
+const CALL_MODE_NAMES = { live: "Real call script (live)", test: "Tutorial (test)" };
+
+/**
+ * What the agent was told for this call, for live runs only.
+ * @param {View} view
+ * @param {CallState} call
+ * @returns {BriefRow[] | null}
+ */
+export function buildBriefRows(view, call) {
+  if (isLiveRun(view) === false || call.brief === null) {
+    return null;
+  }
+
+  const brief = call.brief;
+  /** @type {BriefRow[]} */
+  const rows = [];
+
+  for (const { key, label } of BRIEF_LABELS) {
+    const value = brief[key];
+
+    if (value !== undefined) {
+      let shown = value;
+      const modeName = CALL_MODE_NAMES[value];
+
+      if (key === "call_mode" && modeName !== undefined) {
+        shown = modeName;
+      }
+
+      rows.push({ label, value: shown });
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Collapsed by default, since it is for checking the setup rather than reading every call.
+ * @param {HTMLElement} card
+ * @param {BriefRow[] | null} rows
+ */
+function renderBriefCard(card, rows) {
+  clear(card);
+  card.hidden = rows === null;
+
+  if (rows === null) {
+    return;
+  }
+
+  const list = el("dl", { class: "brief-list" });
+
+  for (const row of rows) {
+    list.appendChild(el("dt", {}, [row.label]));
+    list.appendChild(el("dd", {}, [row.value]));
+  }
+
+  card.appendChild(el("details", {}, [el("summary", { class: "section-label" }, ["Sent to the agent"]), list]));
 }
 
 /**
@@ -1033,11 +1109,13 @@ export function createCallPanel(panel) {
   const agentCard = el("section", { class: "card panel-card panel-agent" });
   const transcriptCard = el("section", { class: "card panel-card transcript-card" });
   const infoCard = el("section", { class: "card panel-card info-card", "aria-label": "Hotel details" });
+  const briefCard = el("section", { class: "card panel-card brief-card" });
   const transcript = createTranscript(transcriptCard);
-  const lastKeys = { call: "", quote: "", agent: "", transcript: "", info: "" };
+  const lastKeys = { call: "", quote: "", agent: "", transcript: "", info: "", brief: "" };
 
   panel.appendChild(callCard);
   panel.appendChild(infoCard);
+  panel.appendChild(briefCard);
   panel.appendChild(quoteCard);
   panel.appendChild(agentCard);
   panel.appendChild(transcriptCard);
@@ -1059,6 +1137,12 @@ export function createCallPanel(panel) {
     }
 
     const infoKey = JSON.stringify(model.info);
+    const briefKey = JSON.stringify(model.brief);
+
+    if (briefKey !== lastKeys.brief) {
+      lastKeys.brief = briefKey;
+      renderBriefCard(briefCard, model.brief);
+    }
 
     if (infoKey !== lastKeys.info) {
       lastKeys.info = infoKey;
