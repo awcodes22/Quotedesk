@@ -1024,7 +1024,7 @@ describe("prompts", () => {
       "In report_quote, fill in every field the business has told you about that offer.",
     );
     expect(JSON.stringify(tools[0])).toContain(
-      "Set false for a non-refundable rate.",
+      "False only when the business says the rate can't be cancelled or refunded.",
     );
   });
 

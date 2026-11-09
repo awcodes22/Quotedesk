@@ -96,10 +96,10 @@ export function speakDates(text: string): string {
 
 export type CallMode = "test" | "live";
 
-// The agent opens with this line. A test call tells the person they are playing the front desk;
+// The agent opens with this line. A test call explains what QuoteDesk does and that this is a test;
 // a real call says up front that it is an assistant and that the call may be recorded.
 export const FIRST_MESSAGE_INTROS: Record<CallMode, string> = {
-  test: "Hi, this is a QuoteDesk test call. I'm the AI agent that calls hotels for quotes. For this call, you play the hotel front desk and I'll ask for a rate just like I would on a real call. Ready when you are.",
+  test: "Hi, this is QuoteDesk. I'm an AI that calls hotels for you, gets quotes from several at once, and picks the best deal. This is a test call, so you'll get to see how it works.",
   live: "Hi there, I'm an assistant calling on behalf of a guest who's looking to book a stay. Just so you know, this call may be recorded. Do you have a quick moment to check a rate for me?",
 };
 

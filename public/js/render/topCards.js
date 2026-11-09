@@ -146,9 +146,19 @@ function buildCard(view, quote) {
     status: findCardStatus(view, quote),
     isLeader,
     faded: view.state.finishedAt !== null && isLeader === false,
-    selected: view.selectedCallId === quote.callId,
+    selected: showsSelection(view, quote.callId),
     notes: findNotes(view, quote.callId),
   };
+}
+
+/**
+ * With one call there is nothing to choose between, and a selection ring would read as a highlight.
+ * @param {View} view
+ * @param {string} callId
+ * @returns {boolean}
+ */
+function showsSelection(view, callId) {
+  return view.state.callOrder.length > 1 && view.selectedCallId === callId;
 }
 
 /**
@@ -200,7 +210,7 @@ function buildPendingCard(view, call) {
     name: call.name,
     initials: initials(call.name),
     status: describePendingCall(view, call),
-    selected: view.selectedCallId === call.callId,
+    selected: showsSelection(view, call.callId),
     notes: call.notes,
   };
 }

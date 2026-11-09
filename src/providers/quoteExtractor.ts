@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import type { IndustryConfig, QuoteFields, TranscriptLine } from "../core/types";
+import type { ExtractedQuote, IndustryConfig, QuoteFields, TranscriptLine } from "../core/types";
 
 export type JsonCompletion = (
   instructions: string,
@@ -8,10 +8,7 @@ export type JsonCompletion = (
   schema: Record<string, unknown>,
 ) => Promise<string>;
 
-export type Extraction = {
-  fields: QuoteFields | null;
-  notes: string[];
-};
+export type Extraction = ExtractedQuote;
 
 export type QuoteExtractor = (
   transcript: Omit<TranscriptLine, "at">[],
@@ -64,6 +61,7 @@ function buildInstructions(industry: IndustryConfig): string {
     "Fill each of these topics with one short sentence when the business mentioned it, and null when it did not:",
     describeTopics(),
     "Never guess or invent a topic. If the transcript doesn't mention it, it is null.",
+    "Free cancellation with a deadline, such as up to 2 days before, is still free cancellation: put the deadline in the cancellation topic. Only treat a rate as non-refundable when the business says it can't be cancelled or refunded.",
     "Put anything else a client would want to know in notes, as short sentences. Never note what the caller said.",
   ].join("\n");
 }
@@ -126,6 +124,21 @@ function parseFields(raw: unknown, industry: IndustryConfig): QuoteFields | null
   return result.data;
 }
 
+// The industry can correct the model with what the business actually said, such as cancellation terms.
+function reviewExtraction(
+  extracted: Extraction,
+  transcript: Omit<TranscriptLine, "at">[],
+  industry: IndustryConfig,
+): Extraction {
+  if (industry.reviewExtraction === undefined) {
+    return extracted;
+  }
+
+  const businessLines = transcript.filter((line) => line.speaker === "business").map((line) => line.text);
+  const reviewed = industry.reviewExtraction(extracted, businessLines);
+  return { fields: reviewed.fields, notes: reviewed.notes.slice(0, MAX_NOTES) };
+}
+
 function readTopicNotes(topics: TopicNotes | undefined): string[] {
   const notes: string[] = [];
 
@@ -174,11 +187,12 @@ export function createQuoteExtractor(complete: JsonCompletion): QuoteExtractor {
       buildResponseSchema(industry),
     );
     const envelope = envelopeSchema.parse(JSON.parse(reply));
-
-    return {
+    const extracted = {
       fields: parseFields(envelope.quote, industry),
       notes: cleanNotes(readTopicNotes(envelope.topics), envelope.notes),
     };
+
+    return reviewExtraction(extracted, transcript, industry);
   }
 
   return extract;

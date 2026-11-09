@@ -411,21 +411,50 @@ function describeStanding(view, call, ranking) {
 }
 
 /**
+ * @param {import("../state.js").TurnMark} mark
+ * @returns {MarkModel}
+ */
+function describeMark(mark) {
+  if (mark.kind === "note") {
+    return { kind: "note", text: "Note saved" };
+  }
+
+  if (mark.lower) {
+    return { kind: "lower", text: `Lower price recorded: ${formatMoney(mark.total)}` };
+  }
+
+  return { kind: "price", text: `Price recorded: ${formatMoney(mark.total)}` };
+}
+
+/**
+ * A live call saves all its notes at once, so they collapse into one line such as "4 notes saved",
+ * shown where the first one landed. A repeated identical mark also shows once.
  * @param {Turn} turn
  * @returns {MarkModel[]}
  */
-function buildMarks(turn) {
-  return turn.marks.map((mark) => {
-    if (mark.kind === "note") {
-      return { kind: "note", text: "Note saved" };
-    }
+export function buildMarks(turn) {
+  const noteCount = turn.marks.filter((mark) => mark.kind === "note").length;
+  /** @type {MarkModel[]} */
+  const marks = [];
+  let notesShown = false;
 
-    if (mark.lower) {
-      return { kind: "lower", text: `Lower price recorded: ${formatMoney(mark.total)}` };
-    }
+  for (const mark of turn.marks) {
+    const described = describeMark(mark);
+    const previous = marks[marks.length - 1];
+    const repeatsPrevious = previous !== undefined && previous.text === described.text;
 
-    return { kind: "price", text: `Price recorded: ${formatMoney(mark.total)}` };
-  });
+    if (mark.kind === "note" && notesShown === false && noteCount > 1) {
+      marks.push({ kind: "note", text: `${noteCount} notes saved` });
+      notesShown = true;
+    } else if (mark.kind === "note" && notesShown === false) {
+      marks.push(described);
+      notesShown = true;
+    } else if (mark.kind !== "note" && repeatsPrevious === false) {
+      marks.push(described);
+    }
+  }
+
+  return marks;
 }
 
 /**

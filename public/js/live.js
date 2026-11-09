@@ -4,6 +4,7 @@ import { followRun } from "./stream.js";
 import { createCallPanel, selectCallPanelModel } from "./render/callPanel.js";
 import { createCompletedBar, selectCompletedBarModel } from "./render/completedBar.js";
 import { createGrid, selectGridModel } from "./render/grid.js";
+import { createGuide, selectGuideModel } from "./render/guide.js";
 import { createHeadAgent, selectHeadAgentModel } from "./render/headAgent.js";
 import { createPickerHeader, createRunHeader, selectRunHeaderModel } from "./render/header.js";
 import { createStats, selectStatsModel } from "./render/stats.js";
@@ -254,7 +255,9 @@ function showRun(runId, jobs) {
     requestRender();
   }
 
+  const guideTargets = { cards: findElement("top-cards"), headAgent: findElement("head-agent") };
   const regions = [
+    onlyWhenChanged(selectGuideModel, createGuide(findElement("guide"), guideTargets)),
     onlyWhenChanged(selectRunHeaderModel, createRunHeader(findElement("topbar"))),
     onlyWhenChanged(selectTrackerModel, createTracker(findElement("tracker"))),
     onlyWhenChanged(selectHeadAgentModel, createHeadAgent(findElement("head-agent"))),

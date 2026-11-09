@@ -330,6 +330,68 @@ p {
   padding: 0 4px;
 }
 
+/* ---------- Test call guide ---------- */
+
+.guide {
+  flex: none;
+  padding: 0 4px 10px;
+  border-bottom: var(--card-border);
+}
+
+.guide-steps {
+  display: flex;
+  gap: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guide-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.guide-marker {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--text-3);
+  border-radius: 50%;
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.guide-step-done {
+  color: var(--text-2);
+}
+
+.guide-step-done .guide-marker {
+  border-color: var(--text-2);
+}
+
+.guide-step-active {
+  color: var(--live);
+  font-weight: 600;
+}
+
+.guide-step-active .guide-marker {
+  border-color: var(--live);
+}
+
+/* The area the active step talks about gets a quiet blue outline, never a fill. */
+.agent-card.guide-focus,
+.top-area.guide-focus .top-card {
+  border-color: var(--live);
+  box-shadow: 0 0 0 3px var(--live-tint);
+}
+
 .steps {
   display: flex;
   align-items: center;

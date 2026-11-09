@@ -566,6 +566,16 @@ export function isSelfTestCall(call) {
 }
 
 /**
+ * A median and a market comparison need several real quotes. One quote, or a test call
+ * answered by the user, would only produce meaningless savings.
+ * @param {RunState} state
+ * @returns {boolean}
+ */
+export function showsPriceComparisons(state) {
+  return isSelfTestRun(state) === false && selectStats(state).quoteCount >= 2;
+}
+
+/**
  * @param {RunState} state
  * @returns {boolean}
  */

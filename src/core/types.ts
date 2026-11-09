@@ -147,6 +147,12 @@ export type BusinessNoun = {
   plural: string;
 };
 
+// What was read out of a live call: the quote fields, if any, and short notes.
+export type ExtractedQuote = {
+  fields: QuoteFields | null;
+  notes: string[];
+};
+
 export type IndustryConfig = {
   id: string;
   label: string;
@@ -159,5 +165,7 @@ export type IndustryConfig = {
   tieBreak?: (a: Quote, b: Quote) => number;
   linePrices?: (fields: QuoteFields) => Record<string, number>;
   fieldLabels?: Record<string, FieldLabel>;
+  // Checks a model's reading of a live call against the business's own words.
+  reviewExtraction?: (extracted: ExtractedQuote, businessLines: string[]) => ExtractedQuote;
   simBusinesses: SimBusiness[];
 };

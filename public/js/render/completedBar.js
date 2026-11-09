@@ -1,7 +1,13 @@
 // @ts-check
 import { clear, el, icon } from "../dom.js";
 import { formatClock, formatMoney, formatSignedPercent } from "../format.js";
-import { isLiveProvider, selectOutcomeLabel, selectRanking, selectStats } from "../state.js";
+import {
+  isLiveProvider,
+  selectOutcomeLabel,
+  selectRanking,
+  selectStats,
+  showsPriceComparisons,
+} from "../state.js";
 import { findBusinessNoun, findFieldLabels, findKeyTerm, runElapsedMs } from "./view.js";
 
 /**
@@ -117,6 +123,10 @@ function buildStats(view) {
   const referenceTotal = findReferenceTotal(view);
   /** @type {BarStat[]} */
   const items = [];
+
+  if (showsPriceComparisons(view.state) === false) {
+    return items;
+  }
 
   if (stats.savedVsMedian !== null) {
     items.push({ label: "Saved vs median", value: formatMoney(stats.savedVsMedian), tone: "win" });

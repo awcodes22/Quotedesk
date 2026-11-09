@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { IndustryConfig, Quote, SimBusiness } from "../core/types";
+import { reviewHotelExtraction } from "./hotelCancellation";
 
 const quoteSchema = z.object({
   total: z
@@ -10,7 +11,7 @@ const quoteSchema = z.object({
     .boolean()
     .optional()
     .describe(
-      "Whether the booking can be cancelled for free. Set false for a non-refundable rate.",
+      "True when the booking can be cancelled for free, even with a deadline such as up to 2 days before. False only when the business says the rate can't be cancelled or refunded.",
     ),
   includesTaxes: z
     .boolean()
@@ -88,6 +89,7 @@ export const hotels: IndustryConfig = {
   commitInstruction:
     "Say you'd like to book the room at that rate, and ask them to email the confirmation.",
   tieBreak: preferFreeCancellation,
+  reviewExtraction: reviewHotelExtraction,
   fieldLabels: {
     freeCancellation: { yes: "free cancellation", no: "non-refundable" },
     includesTaxes: {

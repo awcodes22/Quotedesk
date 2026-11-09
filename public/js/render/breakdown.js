@@ -205,14 +205,27 @@ function renderTile(tile) {
  * @returns {HTMLElement}
  */
 function renderTiles(data) {
-  const tiles = [
-    buildBookedTile(data.summary),
-    buildSavedTile(data.summary),
-    buildTimeTile(data),
-    buildReferenceTile(data.summary),
-  ];
+  const tiles = [buildBookedTile(data.summary), buildTimeTile(data)];
+
+  if (comparesPrices(data.summary)) {
+    tiles.splice(1, 0, buildSavedTile(data.summary));
+    tiles.push(buildReferenceTile(data.summary));
+  }
 
   return el("div", { class: "breakdown-tiles" }, tiles.map(renderTile));
+}
+
+// The server names the one call of a "Call me to test" run this.
+const SELF_TEST_BUSINESS_ID = "test-call";
+
+/**
+ * Savings against a median or the market only mean something with several real quotes.
+ * @param {RunSummary} summary
+ * @returns {boolean}
+ */
+function comparesPrices(summary) {
+  const isSelfTest = summary.quotes.some((quote) => quote.businessId === SELF_TEST_BUSINESS_ID);
+  return isSelfTest === false && summary.quotes.length >= 2;
 }
 
 /**

@@ -2,7 +2,7 @@
 import { clear, el, icon } from "../dom.js";
 import { formatMoney, formatSignedPercent, pluralize } from "../format.js";
 import { buildHistogram } from "../price.js";
-import { selectRanking, selectStats } from "../state.js";
+import { selectRanking, selectStats, showsPriceComparisons } from "../state.js";
 
 /**
  * @typedef {import("./view.js").View} View
@@ -83,11 +83,15 @@ export function selectStatsModel(view) {
   const cards = [
     { label: "Best so far", value: moneyOrEmpty(stats.best), tone: "win" },
     { label: "Median quote", value: moneyOrEmpty(stats.median), tone: "plain" },
-    { label: "Saved vs median", value: moneyOrEmpty(stats.savedVsMedian), tone: "win" },
   ];
   const referenceStat = buildReferenceStat(view, stats.vsReferencePct);
+  const compares = showsPriceComparisons(view.state);
 
-  if (referenceStat !== null) {
+  if (compares) {
+    cards.push({ label: "Saved vs median", value: moneyOrEmpty(stats.savedVsMedian), tone: "win" });
+  }
+
+  if (compares && referenceStat !== null) {
     cards.push(referenceStat);
   }
 

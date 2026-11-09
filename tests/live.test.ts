@@ -416,7 +416,7 @@ describe("live provider", () => {
 
     expect(clientData.dynamic_variables.call_mode).toBe("test");
     expect(clientData.dynamic_variables.first_message_intro).toBe(
-      "Hi, this is a QuoteDesk test call. I'm the AI agent that calls hotels for quotes. For this call, you play the hotel front desk and I'll ask for a rate just like I would on a real call. Ready when you are.",
+      "Hi, this is QuoteDesk. I'm an AI that calls hotels for you, gets quotes from several at once, and picks the best deal. This is a test call, so you'll get to see how it works.",
     );
   });
 
